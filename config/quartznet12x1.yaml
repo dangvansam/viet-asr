@@ -1,0 +1,189 @@
+# Used in the ASR documentation for tutorial purposes
+model: "QuartzNet12x1"
+
+AudioToTextDataLayer:
+    sample_rate: 16000
+    max_duration: 20.0
+    trim_silence: false
+    normalize_transcripts: false
+
+AudioToMelSpectrogramPreprocessor:
+    # sample_rate: 16000
+    window_size: 0.02
+    window_stride: 0.01
+    window: "hann"
+    normalize: "per_feature" #all_feature
+    # log: false
+    n_fft: 512
+    features: 64
+    #lowfreq: 0
+    #highfreq: 8000
+    dither: 0.00001
+    pad_to: 16 #16
+    stft_conv: false
+
+SpectrogramAugmentation:
+    rect_masks: 5
+    rect_time: 120
+    rect_freq: 50
+
+JasperEncoder:
+    activation: "relu"
+    conv_mask: true
+
+    jasper:
+      - filters: 256
+        repeat: 1
+        kernel: [33]
+        stride: [2]
+        dilation: [1]
+        dropout: 0.0
+        residual: false
+        separable: true
+
+      - filters: 256
+        repeat: 1
+        kernel: [33]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 256
+        repeat: 1
+        kernel: [33]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 256
+        repeat: 1
+        kernel: [33]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 256
+        repeat: 1
+        kernel: [39]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 256
+        repeat: 1
+        kernel: [39]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 256
+        repeat: 1
+        kernel: [39]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 512
+        repeat: 1
+        kernel: [51]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 512
+        repeat: 1
+        kernel: [51]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 512
+        repeat: 1
+        kernel: [51]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 512
+        repeat: 1
+        kernel: [63]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 512
+        repeat: 1
+        kernel: [63]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 512
+        repeat: 1
+        kernel: [63]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 512
+        repeat: 1
+        kernel: [75]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: true
+        separable: true
+
+      - filters: 1024
+        repeat: 1
+        kernel: [1]
+        stride: [1]
+        dilation: [1]
+        dropout: 0.0
+        residual: false
+
+#labels: [' ', 'ieeu', 'ieeus', 'ieeuf', 'ieeur', 'ieeux', 'ieeuj', 'oai', 'oais', 'oaif', 'oair', 'oaix', 'oaij', 'oay', 'oays', 'oayf', 'oayr', 'oayx', 'oayj', 'uaay', 'uaays', 'uaayf', 'uaayr', 'uaayx', 'uaayj', 'uooi', 'uoois', 'uooif', 'uooir', 'uooix', 'uooij', 'wowi', 'wowis', 'wowif', 'wowir', 'wowix', 'wowij', 'wowu', 'wowus', 'wowuf', 'wowur', 'wowux', 'wowuj', 'uya', 'uyas', 'uyaf', 'uyar', 'uyax', 'uyaj', 'uyee', 'uyees', 'uyeef', 'uyeer', 'uyeex', 'uyeej', 'ai', 'ais', 'aif', 'aix', 'aij', 'ay', 'ays', 'ayf', 'ayr', 'ayx', 'ayj', 'aay', 'aays', 'aayf', 'aayr', 'aayx', 'aayj', 'ao', 'aos', 'aof', 'aor', 'aox', 'aoj', 'au', 'aus', 'auf', 'aur', 'aux', 'auj', 'aau', 'aaus', 'aauf', 'aaur', 'aaux', 'aauj', 'eo', 'eos', 'eof', 'eor', 'eox', 'eoj', 'eeu', 'eeus', 'eeuf', 'eeur', 'eeux', 'eeuj', 'ia', 'ias', 'iaf', 'iar', 'iax', 'iaj', 'iu', 'ius', 'iuf', 'iur', 'iux', 'iuj', 'iee', 'iees', 'ieef', 'ieer', 'ieex', 'ieej', 'oa', 'oas', 'oaf', 'oar', 'oax', 'oaj', 'oaw', 'oaws', 'oawf', 'oawr', 'oawx', 'oawj', 'oe', 'oes', 'oef', 'oer', 'oex', 'oej', 'oi', 'ois', 'oif', 'oir', 'oix', 'oij', 'ooi', 'oois', 'ooif', 'ooir', 'ooix', 'ooij', 'owi', 'owis', 'owif', 'owir', 'owix', 'owij', 'ua', 'uas', 'uaf', 'uar', 'uax', 'uaj', 'uaa', 'uaas', 'uaaf', 'uaar', 'uaax', 'uaaj', 'uee', 'uees', 'ueef', 'ueer', 'ueex', 'ueej', 'ui', 'uis', 'uif', 'uir', 'uix', 'uij', 'uoo', 'uoos', 'uoof', 'uoor', 'uoox', 'uooj', 'wa', 'was', 'waf', 'war', 'wax', 'waj', 'wi', 'wis', 'wif', 'wir', 'wix', 'wij', 'wow', 'wows', 'wowf', 'wowr', 'wowx', 'wowj', 'wu', 'wus', 'wuf', 'wur', 'wux', 'wuj', 'ng', 'ph', 'th', 'nh', 'kh', 'z', 'tr', 'ch', 'qw', 'a', 'as', 'af', 'ar', 'ax', 'aj', 'aa', 'aas', 'aaf', 'aar', 'aax', 'aaj', 'aw', 'aws', 'awf', 'awr', 'awx', 'awj', 'e', 'es', 'ef', 'er', 'ex', 'ej', 'ee', 'ees', 'eef', 'eer', 'eex', 'eej', 'i', 'is', 'if', 'ir', 'ix', 'ij', 'o', 'os', 'of', 'or', 'ox', 'oj', 'oo', 'oos', 'oof', 'oor', 'oox', 'ooj', 'ow', 'ows', 'owf', 'owr', 'owx', 'owj', 'u', 'us', 'uf', 'ur', 'ux', 'uj', 'w', 'ws', 'wf', 'wr', 'wx', 'wj', 'dd', 'g', 'b', 'c', 'h', 'l', 'm', 'n', 'p', 's', 't', 'v']
+labels: [' ', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 
+'a', 'á', 'à', 'ả', 'ã', 'ạ', 
+'ă', 'ắ', 'ằ', 'ẳ', 'ẵ', 'ặ', 
+'â', 'ấ', 'ầ', 'ẩ', 'ẫ', 'ậ', 
+'b', 'c', 'd', 'đ', 
+'e', 'é', 'è', 'ẻ', 'ẽ', 'ẹ', 
+'f', 'g', 'h', 
+'i', 'í', 'ì', 'ỉ', 'ĩ', 'ị',
+'j', 'k', 'l', 'm', 'n', 
+'o', 'ó', 'ò', 'ỏ', 'õ', 'ọ',
+'ô', 'ố', 'ồ', 'ổ', 'ỗ', 'ộ',
+'ơ', 'ớ', 'ờ', 'ở', 'ỡ', 'ợ',
+'p', 'q', 'r', 's', 't', 
+'u', 'ú', 'ù', 'ủ', 'ũ', 'ụ',
+'ư', 'ứ', 'ừ', 'ử', 'ữ', 'ự',
+'v', 'x', 
+'y', 'ý', 'ỳ', 'ỷ', 'ỹ', 'ỵ', 
+z]
+# labels: [" ", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+#          "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'"]
