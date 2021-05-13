@@ -1,7 +1,8 @@
 # VietASR (NVIDIA NeMo ToolKit)
-⚡ Some experiment with NeMo ⚡
+⚡ Some experiment with [NeMo](https://github.com/NVIDIA/NeMo) ⚡
 # Result
-We list the word error rate (WER) with and without LM of major ASR tasks.
+* Model: [QuartzNet](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/models.html#quartznet) is a smaller version of [Jaser](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/models.html#jasper)  model  
+* I list the word error rate (WER) with and without LM of major ASR tasks.
 
 | Task                   | CER (%) | WER (%) | +LM WER (%) |
 | -----------            | :----:  | :----:  | :----:                                                                                                                                                                |
@@ -15,14 +16,14 @@ Model was trained with ~500 hours Vietnamese speech dataset, was collected from 
 # Installation
 * ctcdecoder, [kemlm](https://github.com/kpu/kenlm) for LM Decode  
 `pip install ds-ctcdecoder`
-* apex: *https://github.com/NVIDIA/apex*
+* and some python libraries: `torch, numpy, librosa, flask, flask_socketio, requests,...`
 
-# Run demo
-* vietnamese model([pretrain](model_vietasr2/checkpoints)): `python flask_upload_record_vn.py`  
+# Run Demo
+* Vietnamese Model ([pretrained](model_vietasr2/checkpoints)): `python flask_upload_record_vn.py`  
 * Video demo in Youtube: https://youtu.be/P3mhEngL1us  
 [![Video demo](https://img.youtube.com/vi/P3mhEngL1us/maxresdefault.jpg)](https://youtu.be/P3mhEngL1us)  
 
-* english model([pretrain](model_english)): `python flask_upload_record_en.py`  
+* English Model ([pretrained](model_english)): `python flask_upload_record_en.py`  
 
 # TODO   
 * Conformer Model  
