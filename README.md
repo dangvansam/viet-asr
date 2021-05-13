@@ -18,13 +18,14 @@ Model was trained with ~500 hours Vietnamese speech dataset, was collected from 
 * apex: *https://github.com/NVIDIA/apex*
 
 # Run demo
-* vietnamese pretrained model  
-`python flask_upload_record_vn.py`  
-*Video youtube: https://youtu.be/P3mhEngL1us*  
+* vietnamese model([pretrain](model_vietasr2/checkpoints)): `python flask_upload_record_vn.py`  
+* Video demo in Youtube: https://youtu.be/P3mhEngL1us  
 [![Video demo](https://img.youtube.com/vi/P3mhEngL1us/maxresdefault.jpg)](https://youtu.be/P3mhEngL1us)  
-* english pretrained model: `python flask_upload_record_en.py`  
+
+* english model([pretrain](model_english)): `python flask_upload_record_en.py`  
 
 # TODO   
 * Conformer Model  
 * Transformer LM instead of kenlm  
 * Data augumentation: speed, noise, pitch shift, time shift,...  
+* FastAPI
