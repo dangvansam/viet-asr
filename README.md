@@ -5,14 +5,14 @@
 * apex: *https://github.com/NVIDIA/apex*
 ...
 # Result
-We list the character error rate (CER) and word error rate (WER) of major ASR tasks.
+We list the word error rate (WER) with and without LM of major ASR tasks.
 
-| Task                   | CER (%) | WER (%) | Pretrained model|
+| Task                   | CER (%) | WER (%) | +LM WER (%) |
 | -----------            | :----:  | :----:  | :----:                                                                                                                                                                |
-| VIVOS (TEST)            | .    | .     | [link](model_vietasr2/) |
-| VLSP2018                | .    | .     | [link](model_vietasr2/) |
-| VLSP2020 T1             | .    | .     | [link](model_vietasr2/) |
-| VLSP2020 T2             | .    | .     | [link](model_vietasr2/) |
+| VIVOS (TEST)            |  6.80 | 18.02 | 15.72 |
+| VLSP2018                |  6.87 | 16.26 |  N/A  |
+| VLSP2020 T1             | 14.73 | 30.96 |  N/A  |
+| VLSP2020 T2             | 41.67 | 69.15 |  N/A  |
 
 # Run demo
 * vietnamese pretrained model  
