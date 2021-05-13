@@ -1,6 +1,6 @@
 # Demo VietASR (NVIDIA NeMo ToolKit)
 # Installation
-* ctcdecoder, kemlm: *nemo\scripts\install_decoders.sh* for LM Decode  
+* ctcdecoder, [kemlm](https://github.com/kpu/kenlm) for LM Decode  
 `pip install ds-ctcdecoder`
 * apex: *https://github.com/NVIDIA/apex*
 ...
