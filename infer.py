@@ -8,7 +8,6 @@ from nemo.backends.pytorch.nm import DataLayerNM
 from nemo.core.neural_types import NeuralType, AudioSignal, LengthsType
 from ruamel.yaml import YAML
 import os
-from g2pNp2g_simple.p2gFuntion import p2g_simple as p2g
 import librosa
 from nemo.collections.asr.helpers import post_process_predictions, post_process_transcripts
 
@@ -79,10 +78,6 @@ def __ctc_decoder_predictions_tensor(tensor, labels):
     return hypotheses
 
 def load_audio(filename):
-    # with sf.SoundFile(filename, 'r') as f:
-    #     sample_rate = f.samplerate
-    #     samples = f.read()
-    #     samples = samples.transpose()
     samples, _ = librosa.load(filename, sr=16000)
     return samples
 
@@ -142,7 +137,6 @@ def restore_model(config_file, encoder_checkpoint, decoder_checkpoint):
         evaluated_tensors = self.infer(tensors=infer_tensors, verbose=False)
         #Greedy
         greedy_hypotheses = post_process_predictions(evaluated_tensors[0], labels)
-        # print("greedy predict:", greedy_hypotheses)
         #Beam search
         beam_hypotheses = []
         # Over mini-batch
@@ -150,23 +144,6 @@ def restore_model(config_file, encoder_checkpoint, decoder_checkpoint):
             # Over samples
             for j in i:
                 beam_hypotheses.append(j[0][1])
-        # print("beam predict:",beam_hypotheses)
-
-        # exit()
-        # print("log_probs:",log_probs)
-
-        # print("predictions:",predictions)
-        # print("beam_predictions:",beam_predictions_e1)
-        #tensors = self.infer([log_probs])
-        # # tensors = self.infer(
-        # #     tensors=log_probs,
-        # #     #checkpoint_dir='quartznet12x1_abc_them100h/checkpoints/'
-        # # )
-        # logits = tensors[0][0]
-        # #print('logits:',logits.shape)
-        # labels = list(model_definition['labels'])
-        # #print(type(labels))
-        # text = __ctc_decoder_predictions_tensor(logits, labels)[0]
         return greedy_hypotheses[0], beam_hypotheses[0]
 
     neural_factory.infer_signal = infer_signal.__get__(neural_factory)
