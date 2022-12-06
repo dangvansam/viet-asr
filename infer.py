@@ -83,22 +83,21 @@ def load_audio(filename):
 
 def restore_model(config_file, encoder_checkpoint, decoder_checkpoint):
 
-    MODEL_YAML = config_file#'config/quartznet12x1.yaml'
-    CHECKPOINT_ENCODER = encoder_checkpoint#'QuartzNet12x1_vivos/checkpoints/JasperEncoder-STEP-36700.pt'
-    CHECKPOINT_DECODER = decoder_checkpoint#'QuartzNet12x1_vivos/checkpoints/JasperDecoderForCTC-STEP-36700.pt'
+    MODEL_YAML = config_file
+    CHECKPOINT_ENCODER = encoder_checkpoint
+    CHECKPOINT_DECODER = decoder_checkpoint
 
     yaml = YAML(typ="safe")
-    with open(MODEL_YAML) as f:
+    with open(MODEL_YAML, encoding="utf-8") as f:
         model_definition = yaml.load(f)
 
-    # some changes for streaming scenario
     model_definition['AudioToMelSpectrogramPreprocessor']['dither'] = 0
     model_definition['AudioToMelSpectrogramPreprocessor']['pad_to'] = 0
 
     neural_factory = nemo.core.NeuralModuleFactory(
         placement=nemo.core.DeviceType.GPU,
         backend=nemo.core.Backend.PyTorch)
-    #print(model_definition)
+
     data_layer = AudioDataLayer(sample_rate=model_definition['AudioToMelSpectrogramPreprocessor']['sample_rate'])
 
     data_preprocessor = nemo_asr.AudioToMelSpectrogramPreprocessor(**model_definition['AudioToMelSpectrogramPreprocessor'])
