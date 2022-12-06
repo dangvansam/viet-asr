@@ -1,0 +1,11 @@
+ds-ctcdecoder
+torch==1.8.1+cpu
+torchvision==0.9.1+cpu
+torchaudio==0.8.1
+numpy==1.18.2
+flask
+flask_socketio
+requests
+ruamel.yaml
+frozendict
+torch_stft
