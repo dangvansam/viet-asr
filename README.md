@@ -16,27 +16,49 @@ Model was trained with ~500 hours Vietnamese speech dataset, was collected from 
 
 Installation
 ------------
-* ctcdecoder, [kemlm](https://github.com/kpu/kenlm) for LM Decode  
-`pip install ds-ctcdecoder`
-* and some python libraries: `torch, numpy, librosa, flask, flask_socketio, requests,...`
-
-Demo
++ Update & install linux libs:
+```bash
+apt-get update && apt-get install -y libsndfile1 ffmpeg
+```
++ Install [python>=3.8](https://www.python.org/downloads/release/python-385/)
+* Python libs:
+```bash
+pip install -r requirements.txt
+```
++ Install [torch 1.8.1](https://pytorch.org/get-started/previous-versions/#v181):
+```bash
+# cpu only, you can install CUDA version if you have NVidia GPU
+pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
+```
++ Install [kemlm](https://github.com/kpu/kenlm) for LM decoding (only support Linux) 
+```bash
+pip install https://github.com/kpu/kenlm/archive/master.zip
+```
+Transcribe audio file
 --------
-* Vietnamese Model ([pretrained](model_vietasr2/checkpoints)): `python flask_upload_record_vn.py`  
-* Video demo in Youtube:
+```bash
+python infer.py audio_samples # will transcribe audio file in folder: audio_samples
+```
+Run web application
+--------
+* Run app:
+```bash
+python app.py # app will run on address: https://localhost:5000
+```
+* Video demo on Youtube:
    + v1: https://youtu.be/P3mhEngL1us  
    + v2: https://youtu.be/o9NpWi3VUHs  
-   
+
 [![Video demo](https://img.youtube.com/vi/P3mhEngL1us/maxresdefault.jpg)](https://youtu.be/P3mhEngL1us)  
 
-* English Model ([pretrained](model_english)): `python flask_upload_record_en.py`  
+<!-- * English Model ([pretrained](model_english)) -->
 
 TODO
 ------
-* Conformer Model  
-* Transformer LM instead of kenlm  
+* Conformer Model
 * Data augumentation: speed, noise, pitch shift, time shift,...  
 * FastAPI
+* Add Dockerfile
 
 Citation
 --------
