@@ -30,11 +30,10 @@ pip install -r requirements.txt
 # cpu only, you can install CUDA version if you have NVidia GPU
 pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
 ```
-+ Install [kemlm](https://github.com/kpu/kenlm) for LM decoding  
++ Install [kemlm](https://github.com/kpu/kenlm) for LM decoding (only support Linux) 
 ```bash
 pip install https://github.com/kpu/kenlm/archive/master.zip
 ```
-
 Transcribe audio file
 --------
 ```bash
@@ -42,14 +41,17 @@ python infer.py audio_samples # will transcribe audio file in folder: audio_samp
 ```
 Run web application
 --------
-* Vietnamese Model ([pretrained](model_vietasr2/checkpoints)): `python flask_upload_record_vn.py`  
-* Video demo in Youtube:
+* Run app:
+```bash
+python app.py # app will run on address: https://localhost:5000
+```
+* Video demo on Youtube:
    + v1: https://youtu.be/P3mhEngL1us  
    + v2: https://youtu.be/o9NpWi3VUHs  
-   
+
 [![Video demo](https://img.youtube.com/vi/P3mhEngL1us/maxresdefault.jpg)](https://youtu.be/P3mhEngL1us)  
 
-* English Model ([pretrained](model_english)): `python flask_upload_record_en.py`  
+<!-- * English Model ([pretrained](model_english)) -->
 
 TODO
 ------
