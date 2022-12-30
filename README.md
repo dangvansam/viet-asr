@@ -1,6 +1,5 @@
 # VietASR (Vietnamese Automatic Speech Recognition)
-⚡ Some experiment with [NeMo](https://github.com/NVIDIA/NeMo) ⚡
-Result
+⚡ Some experiment with [NeMo](https://github.com/NVIDIA/NeMo) ⚡  
 ------
 * Model: [QuartzNet](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/models.html#quartznet) is a smaller version of [Jaser](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/models.html#jasper)  model  
 
