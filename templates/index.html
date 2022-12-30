@@ -6,11 +6,8 @@
     <title>Demo ASR</title>
     <script type="text/javascript" src="//code.jquery.com/jquery-1.4.2.min.js"></script>
     <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
-    <!-- <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css" integrity="sha384-HSMxcRTRxnN+Bdg0JdbxYKrThecOKuH5zCYotlSAcp1+c8xmyTe9GYg1l9a69psu" crossorigin="anonymous"> -->
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
     <style>
-        #body {
-        }
         #main{
             text-align: center;
             margin-top: 50px;
@@ -27,14 +24,13 @@
         #result_greedy, #result_beamlm{
             color: mediumseagreen;
         }
-        footer{
-            padding-bottom: 10px;
-        }
     </style>
 </head>
 <body>
 <div id="main">
-    <h2>Nhận dạng giọng nói</h2>
+    <h2>Nhận dạng giọng nói - <a href="https://github.com/dangvansam98/viet-asr">VietASR</span></h2>
+        <a href="https://github.com/dangvansam98">by github.com/dangvansam98</a> 
+
     <hr style="width:50%";>
     <div id="div_record">
         <p><a id="status"></a></p>
@@ -49,25 +45,26 @@
         <p></p>
         <form name ='upload' method="post" action="/upload" enctype="multipart/form-data">
             <div class="custom-file" style="width:90%">
-                <input type="file" name="file" class="custom-file-input" id="inputGroupFile01">
-                <label class="custom-file-label" for="inputGroupFile01">Chọn file</label>
+                <input type="file" name="file" class="custom-file-input" id="input_file">
+                <label class="custom-file-label" for="inputGroupFile01" id="label_input">Chọn file</label>
               </div>
             <p></p>
             <button type="submit" class="btn btn-primary" style="margin-bottom: 10px;">Tải lên</button>
         </form>
+        <script>
+            $("#input_file").change(function(){
+                $("#label_input").text(this.files[0].name);
+            });
+        </script>
     </div>
     <hr style="width:50%";>
-    <h5>Kết quả nhận dạng</h5>
     <p></p>
-    {% if audio_path != None %}
-    <audio controls autoplay>
-        <source src= "{{audio_path}}" type="audio/wav">
+    <audio id="recordedAudio" controls autoplay>
+        <source src= "{{audiopath}}" type="audio/wav">
     </audio>
-    {% endif %}
-    <audio id="recordedAudio"></audio>
+    <h5 style="color: royalblue;">Kết quả nhận dạng</h5>
     <p></p>
-    <h5 id="result_greedy"><span style="color: orangered;">Greedy:</span> {{greedy_predict}}</h5>
-    <h5 id="result_beamlm"><span style="color: orangered;">BeamLM:</span> {{beam_predict}}</h5>
+    <h5 id="transcript">{{transcript}}</h5>
     <div>
         <p></p>
         <p></p>
@@ -77,7 +74,6 @@
 <script>
     var socket;
     $(document).ready(function() {
-        // The http vs. https is important. Use http for localhost!
         socket = io.connect('https://' + document.domain + ':' + location.port);
     });
 
@@ -95,11 +91,8 @@
                                             navigator.mediaDevices.webkitGetUserMedia ||
                                             navigator.mediaDevices.mozGetUserMedia || 
                                             navigator.mediaDevices.msGetUserMedia;
-        //console.log("Đã tìm thấy microphone")
     }
     else{
-        //console.log("Không tìm thấy microphone")
-        //alert("Không tìm thấy microphone")
     }
     navigator.mediaDevices.getUserMedia({audio:true}).then(stream => {handlerFunction2(stream)})
 
@@ -144,28 +137,21 @@
     }
 
     function handlerFunction2(stream){
-        var context = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 44100});
-        // var context = new window.AudioContext();
+        var context = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 16000});
         bufferSize = 2048
         numInChannels = 2
         numOutChannels = 2
         var input = context.createMediaStreamSource(stream);
-        // var processor = context.createScriptProcessor(1024, 1, 1);
         if (context.createScriptProcessor) {
             processor = context.createScriptProcessor(bufferSize, numInChannels, numOutChannels);
         } else {
             processor = context.createJavaScriptNode(bufferSize, numInChannels, numOutChannels);
         }
-        // var audio_signal = []
-        // var recordingLength = 0
         var leftchannel = [];
         var rightchannel = [];
         var recordingLength = 0;
-        //var recordingLength = 0;
         var volume = null;
-        //var mediaStream = null;
-        var sampleRate = 44100;
-        //var context = null;
+        var sampleRate = 16000;
         var blob = null;
         record.onclick = function(){
             console.log('start')
@@ -173,17 +159,12 @@
             div_upload.style.display = "None";
             stopRecord.style.display = "unset";
             document.getElementById("status").innerHTML = 'Trạng thái: <span style="color: mediumseagreen;">Đang ghi âm</span>';
-            //stopRecord.disabled=false;
-            //audioChunks = [];
-            //rec.start();
-            //console.log()
             audio_signal = []
             leftchannel = []
             rightchannel = []
             recordingLength = 0
             processor.connect(context.destination);
             input.connect(processor);
-            //input.start();
         };
 
         stopRecord.onclick = function() {
@@ -194,19 +175,9 @@
             record.disabled = true;
             stopRecord.style.display = "None";
 
-            //processor.disconnect(context.destination);
-            //input.disconnect(processor);
-
-            // we flat the left and right channels down
-            // Float32Array[] => Float32Array
             var leftBuffer = flattenArray(leftchannel, recordingLength); // flattenArray is on GitHub (see below)
             var rightBuffer = flattenArray(rightchannel, recordingLength);
-
-            // we interleave both channels together
-            // [left[0],right[0],left[1],right[1],...]
             var interleaved = interleave(leftBuffer, rightBuffer); // interleave is on GitHub (see below)
-
-            // we create our wav file
             var buffer = new ArrayBuffer(44 + interleaved.length * 2);
             var view = new DataView(buffer);
 
@@ -237,30 +208,20 @@
                 index += 2;
             }
 
-            // our final blob
             var blob = new Blob([view], { type: 'audio/wav' });
-            // recordedAudio.src = URL.createObjectURL(blob);
-            // recordedAudio.controls=true;
-            // recordedAudio.autoplay=true;
             document.getElementById("status").innerHTML = 'Trạng thái: <span style="color: mediumseagreen;">Đang nhận dạng</span>';
             var reader = new FileReader();
             reader.readAsDataURL(blob); 
             reader.onloadend = function () { 
                 var base64String = reader.result; 
-                //console.log('Base64 String:', base64String);
                 socket.emit('audio_to_server', {'audio_base64':base64String})
             }
-            //console.log(audio_signal);
-            // socket.emit('audio_to_server', {'data':audio_signal})
-            
             socket.on('audio_to_client', function(data){
                 filepath = data['filepath']
                 console.log(filepath)
-                console.log(data['text_greedy'])
-                console.log(data['text_beamlm'])
+                console.log(data['transcript'])
                 document.getElementById("status").innerHTML = 'Trạng thái: <span style="color: mediumseagreen;">Hoàn thành</span>';
-                document.getElementById("result_greedy").innerHTML = '<span style="color: orangered;">Greedy:</span>' + data['text_greedy'];
-                document.getElementById("result_beamlm").innerHTML = '<span style="color: orangered;">Greedy:</span>' + data['text_beamlm'];
+                document.getElementById("transcript").innerText = data['transcript'];
                 recordedAudio.src = data['filepath']
                 recordedAudio.controls=true;
                 recordedAudio.autoplay=true;
@@ -270,17 +231,10 @@
         };
 
         processor.onaudioprocess = function (e){
-            // audiodata = new Int16Array(convertFloat32ToInt16(data.inputBuffer.getChannelData(0)));
             console.log("recording")
-            //audio_signal.push(new Float32Array(e.inputBuffer.getChannelData(0)));
             leftchannel.push(new Float32Array(e.inputBuffer.getChannelData(0)));
             rightchannel.push(new Float32Array(e.inputBuffer.getChannelData(1)));
             recordingLength += bufferSize;
-            
-            //console.log(audio_signal.length);
-            //audio_signal =  Float32Concat(audio_signal, data.inputBuffer.getChannelData(0))
-            //recordingLength += bufferSize
-            
         };
     };
     
@@ -289,5 +243,4 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
 </body>
-
 </html>
