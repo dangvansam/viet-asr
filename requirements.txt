@@ -6,3 +6,10 @@ requests
 ruamel.yaml
 frozendict
 torch_stft
+python-datautil
+wrapt
+wget
+kaldi_io
+pandas
+inflect
+unidecode
