@@ -16,25 +16,31 @@ Model was trained with ~500 hours Vietnamese speech dataset, was collected from 
 
 Installation
 ------------
++ Update & install linux libs:
+```bash
+apt-get update && apt-get install -y libsndfile1 ffmpeg
+```
 + Install [python>=3.8](https://www.python.org/downloads/release/python-385/)
+* Python libs:
+```bash
+pip install -r requirements.txt
+```
 + Install [torch 1.8.1](https://pytorch.org/get-started/previous-versions/#v181):
 ```bash
 # cpu only, you can install CUDA version if you have NVidia GPU
 pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
 ```
-
 + Install [kemlm](https://github.com/kpu/kenlm) for LM decoding  
 ```bash
-# Windows: Microsoft Visual C++ 14.0 is required
-# Get it with "Build Tools for Visual Studio": https://visualstudio.microsoft.com/downloads
 pip install https://github.com/kpu/kenlm/archive/master.zip
 ```
-* and some python libraries: `numpy, librosa, flask, flask_socketio, requests,...`
-```bash
-pip install -r requirements.txt
-```
 
-Run application
+Transcribe audio file
+--------
+```bash
+python infer.py audio_samples # will transcribe audio file in folder: audio_samples
+```
+Run web application
 --------
 * Vietnamese Model ([pretrained](model_vietasr2/checkpoints)): `python flask_upload_record_vn.py`  
 * Video demo in Youtube:
