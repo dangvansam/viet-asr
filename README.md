@@ -3,16 +3,8 @@
 Result
 ------
 * Model: [QuartzNet](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/models.html#quartznet) is a smaller version of [Jaser](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/models.html#jasper)  model  
-* I list the word error rate (WER) with and without LM of major ASR tasks.
 
-| Task                   | CER (%) | WER (%) | +LM WER (%) |
-| -----------            | :----:  | :----:  | :----:                                                                                                                                                                |
-| VIVOS (TEST)            |  6.80 | 18.02 | 15.72 |
-| VLSP2018                |  6.87 | 16.26 |  N/A  |
-| VLSP2020 T1             | 14.73 | 30.96 |  N/A  |
-| VLSP2020 T2             | 41.67 | 69.15 |  N/A  |
-
-Model was trained with ~500 hours Vietnamese speech dataset, was collected from youtube, radio, call center(8k), text to speech data and some public dataset (vlsp, vivos, fpt). It is very small model (13M parameters) make it inference so fast ⚡  
+The pretrained model on this repo was trained with ~100 hours Vietnamese speech dataset, was collected from youtube, radio, call center(8k), text to speech data and some public dataset (vlsp, vivos, fpt). It is very small model (13M parameters) make it inference so fast ⚡  
 
 Installation
 ------------
