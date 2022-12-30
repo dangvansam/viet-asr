@@ -1,3 +1,4 @@
+Cython
 wheel
 numpy==1.23
 flask
