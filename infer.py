@@ -110,23 +110,34 @@ class VietASR:
             feat_in=model_definition['JasperEncoder']['jasper'][-1]['filters'],
             num_classes=len(model_definition['labels']))
 
-        greedy_decoder = nemo_asr.GreedyCTCDecoder()
-        labels = model_definition['labels']
+        # greedy_decoder = nemo_asr.GreedyCTCDecoder()
 
-        use_beamsearch = False
-        try:
-            beamsearch_decoder = nemo_asr.BeamSearchDecoderWithLM(
-                vocab=labels,
-                beam_width=beam_width,
-                alpha=lm_alpha,
-                beta=lm_beta,
-                lm_path=lm_path,
-                num_cpus=max(1, os.cpu_count())
-            )
-            use_beamsearch = True
-        except Exception as e:
-            logger.error(f"error: {str(e)} when init beamsearch decoder, use greedy decoder only")
-            logger.info(f"use greedy decoder only")
+        labels = model_definition['labels']
+        # use_beamsearch = False
+
+        if lm_path and os.path.exists(lm_path):
+            try:
+                import kenlm  # check kenlm
+                logger.info(f"use beamsearch decoder with language model")
+            except:
+                logger.error(
+                    "kenlm python bindings are not installed. Most likely you want to install it using: "
+                    "pip install https://github.com/kpu/kenlm/archive/master.zip"
+                )
+                lm_path = None
+
+        if lm_path is None:
+            logger.info(f"use beamsearch decoder without language model")
+
+        beamsearch_decoder = nemo_asr.BeamSearchDecoderWithLM(
+            vocab=labels,
+            beam_width=beam_width,
+            alpha=lm_alpha,
+            beta=lm_beta,
+            lm_path=lm_path,
+            num_cpus=max(1, os.cpu_count())
+        )
+
         # load pre-trained model
         jasper_encoder.restore_from(encoder_checkpoint)
         jasper_decoder.restore_from(decoder_checkpoint)
@@ -145,30 +156,19 @@ class VietASR:
         # foward decoder
         log_probs = jasper_decoder(encoder_output=encoded)
 
-        # greedy decode
-        greedy_predictions = greedy_decoder(log_probs=log_probs)
-        infer_tensors = [greedy_predictions]
         # beamsearch decode
-        if use_beamsearch:
-            beam_predictions = beamsearch_decoder(log_probs=log_probs, log_probs_length=encoded_len)
-            infer_tensors.append(beam_predictions)
+        beam_predictions = beamsearch_decoder(log_probs=log_probs, log_probs_length=encoded_len)
+        infer_tensors = [beam_predictions]
 
         self.data_layer = data_layer
         self.neural_factory = neural_factory
         self.infer_tensors = infer_tensors
-        self.labels = labels
 
     def transcribe(self, audio_signal: np.array):
         self.data_layer.set_signal(audio_signal)
         evaluated_tensors = self.neural_factory.infer(tensors=self.infer_tensors, verbose=False)
-        greedy_hypotheses = post_process_predictions(evaluated_tensors[0], self.labels)[0]
-        if len(evaluated_tensors) == 2:
-            beam_hypotheses = []
-            for i in evaluated_tensors[1]:
-                for j in i:
-                    beam_hypotheses.append(j[0][1])
-            return beam_hypotheses
-        return greedy_hypotheses
+        hypotheses = evaluated_tensors[0][0]
+        return hypotheses
 
 
 if __name__=="__main__":
@@ -179,16 +179,17 @@ if __name__=="__main__":
     logger.info(f"transcribe audio file in : {input_dir}")
 
     config = 'configs/quartznet12x1_vi.yaml'
-    encoder_checkpoint = 'checkpoints/vietnamese/JasperEncoder-STEP-289936.pt'
-    decoder_checkpoint = 'checkpoints/vietnamese/JasperDecoderForCTC-STEP-289936.pt'
+    encoder_checkpoint = 'models/acoustic_model/vietnamese/JasperEncoder-STEP-289936.pt'
+    decoder_checkpoint = 'models/acoustic_model/vietnamese/JasperDecoderForCTC-STEP-289936.pt'
+    lm_path = 'models/language_model/3-gram-lm.binary'
 
     vietasr = VietASR(
         config_file=config,
         encoder_checkpoint=encoder_checkpoint,
         decoder_checkpoint=decoder_checkpoint,
+        lm_path=lm_path,
+        beam_width=100
     )
-
-    # audio_dir = 'audio_samples'
 
     for f in os.listdir(input_dir):
         if not f.endswith(".wav") and not f.endswith(".mp3"):
