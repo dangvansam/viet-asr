@@ -1,3 +1,0 @@
-_swig_decoders
-ctc_decoders
-swig_decoders
