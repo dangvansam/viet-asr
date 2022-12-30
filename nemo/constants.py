@@ -34,7 +34,6 @@ ACCEPTED_FLOAT_NUMBER_FORMATS = (
     np.float16,
     np.float32,
     np.float64,
-    np.float128,
 )
 
 ACCEPTED_STR_NUMBER_FORMATS = (

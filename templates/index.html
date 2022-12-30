@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo ASR</title>
+    <script type="text/javascript" src="//code.jquery.com/jquery-1.4.2.min.js"></script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <style>
+        #main{
+            text-align: center;
+            margin-top: 50px;
+        }
+        #stopRecord{
+            display: none;
+        }
+        #recordedAudio{
+            margin-top: 10px;
+        }
+        #div_upload{
+            text-align: center;
+        }
+        #result_greedy, #result_beamlm{
+            color: mediumseagreen;
+        }
+    </style>
+</head>
+<body>
+<div id="main">
+    <h2>Nhận dạng giọng nói - <a href="https://github.com/dangvansam98/viet-asr">VietASR</span></h2>
+        <a href="https://github.com/dangvansam98">by github.com/dangvansam98</a> 
+
+    <hr style="width:50%";>
+    <div id="div_record">
+        <p><a id="status"></a></p>
+        <a style="font-style: italic;">Ghi âm trực tiếp bằng microphone</a>
+        <p></p>
+        <button class="btn btn-primary" id="record">Bắt đầu thu âm</button>
+        <button class="btn btn-danger" id="stopRecord" >Dừng</button>
+    </div>
+    <div id="div_upload">
+        <hr style="width:50%";>
+        <a style="font-style: italic;">Tải lên file (wav, mp3)</a>
+        <p></p>
+        <form name ='upload' method="post" action="/upload" enctype="multipart/form-data">
+            <div class="custom-file" style="width:90%">
+                <input type="file" name="file" class="custom-file-input" id="input_file">
+                <label class="custom-file-label" for="inputGroupFile01" id="label_input">Chọn file</label>
+              </div>
+            <p></p>
+            <button type="submit" class="btn btn-primary" style="margin-bottom: 10px;">Tải lên</button>
+        </form>
+        <script>
+            $("#input_file").change(function(){
+                $("#label_input").text(this.files[0].name);
+            });
+        </script>
+    </div>
+    <hr style="width:50%";>
+    <p></p>
+    <audio id="recordedAudio" controls autoplay>
+        <source src= "{{audiopath}}" type="audio/wav">
+    </audio>
+    <h5 style="color: royalblue;">Kết quả nhận dạng</h5>
+    <p></p>
+    <h5 id="transcript">{{transcript}}</h5>
+    <div>
+        <p></p>
+        <p></p>
+        <p></p>
+    </div>
+</div>
+<script>
+    var socket;
+    $(document).ready(function() {
+        socket = io.connect('https://' + document.domain + ':' + location.port);
+    });
+
+    function send_to_server(){
+        file = document.getElementById("files").value
+        console.log("send" + file)
+        socket.emit("audio_to_server", file)
+        socket.on("audio_to_client", function(data){
+            console.log(data)
+        })
+    }
+
+    if (!navigator.getUserMedia){
+        navigator.mediaDevices.getUserMedia = navigator.mediaDevices.getUserMedia ||
+                                            navigator.mediaDevices.webkitGetUserMedia ||
+                                            navigator.mediaDevices.mozGetUserMedia || 
+                                            navigator.mediaDevices.msGetUserMedia;
+    }
+    else{
+    }
+    navigator.mediaDevices.getUserMedia({audio:true}).then(stream => {handlerFunction2(stream)})
+
+    function convertFloat32ToInt16(buffer){
+        l = buffer.length;
+        buf = new Int16Array(l);
+        while (l--){
+            buf[l] = Math.min(1, buffer[l])*0x7FFF;
+        }
+        return buf.buffer;
+    }
+
+    function flattenArray(channelBuffer, recordingLength) {
+            var result = new Float32Array(recordingLength);
+            var offset = 0;
+            for (var i = 0; i < channelBuffer.length; i++) {
+                var buffer = channelBuffer[i];
+                result.set(buffer, offset);
+                offset += buffer.length;
+            }
+            return result;
+        }
+
+    function interleave(leftChannel, rightChannel) {
+        var length = leftChannel.length + rightChannel.length;
+        var result = new Float32Array(length);
+
+        var inputIndex = 0;
+
+        for (var index = 0; index < length;) {
+            result[index++] = leftChannel[inputIndex];
+            result[index++] = rightChannel[inputIndex];
+            inputIndex++;
+        }
+        return result;
+    }
+
+    function writeUTFBytes(view, offset, string) {
+        for (var i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    }
+
+    function handlerFunction2(stream){
+        var context = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 16000});
+        bufferSize = 2048
+        numInChannels = 2
+        numOutChannels = 2
+        var input = context.createMediaStreamSource(stream);
+        if (context.createScriptProcessor) {
+            processor = context.createScriptProcessor(bufferSize, numInChannels, numOutChannels);
+        } else {
+            processor = context.createJavaScriptNode(bufferSize, numInChannels, numOutChannels);
+        }
+        var leftchannel = [];
+        var rightchannel = [];
+        var recordingLength = 0;
+        var volume = null;
+        var sampleRate = 16000;
+        var blob = null;
+        record.onclick = function(){
+            console.log('start')
+            record.style.display = "None";
+            div_upload.style.display = "None";
+            stopRecord.style.display = "unset";
+            document.getElementById("status").innerHTML = 'Trạng thái: <span style="color: mediumseagreen;">Đang ghi âm</span>';
+            audio_signal = []
+            leftchannel = []
+            rightchannel = []
+            recordingLength = 0
+            processor.connect(context.destination);
+            input.connect(processor);
+        };
+
+        stopRecord.onclick = function() {
+            console.log("stop")
+            //alert("stop")
+            document.getElementById("status").innerHTML = 'Trạng thái: <span style="color: mediumseagreen;">Dừng ghi âm</span>';
+            record.style.display = "unset";
+            record.disabled = true;
+            stopRecord.style.display = "None";
+
+            var leftBuffer = flattenArray(leftchannel, recordingLength); // flattenArray is on GitHub (see below)
+            var rightBuffer = flattenArray(rightchannel, recordingLength);
+            var interleaved = interleave(leftBuffer, rightBuffer); // interleave is on GitHub (see below)
+            var buffer = new ArrayBuffer(44 + interleaved.length * 2);
+            var view = new DataView(buffer);
+
+            // RIFF chunk descriptor
+            writeUTFBytes(view, 0, 'RIFF');
+            view.setUint32(4, 44 + interleaved.length * 2, true);
+            writeUTFBytes(view, 8, 'WAVE');
+
+            // FMT sub-chunk
+            writeUTFBytes(view, 12, 'fmt ');
+            view.setUint32(16, 16, true); // chunkSize
+            view.setUint16(20, 1, true); // wFormatTag
+            view.setUint16(22, 2, true); // wChannels: stereo (2 channels)
+            view.setUint32(24, sampleRate, true); // dwSamplesPerSec
+            view.setUint32(28, sampleRate * 4, true); // dwAvgBytesPerSec
+            view.setUint16(32, 4, true); // wBlockAlign
+            view.setUint16(34, 16, true); // wBitsPerSample
+
+            // data sub-chunk
+            writeUTFBytes(view, 36, 'data');
+            view.setUint32(40, interleaved.length * 2, true);
+
+            // write the PCM samples
+            var index = 44;
+            var volume = 1;
+            for (var i = 0; i < interleaved.length; i++) {
+                view.setInt16(index, interleaved[i] * (0x7FFF * volume), true);
+                index += 2;
+            }
+
+            var blob = new Blob([view], { type: 'audio/wav' });
+            document.getElementById("status").innerHTML = 'Trạng thái: <span style="color: mediumseagreen;">Đang nhận dạng</span>';
+            var reader = new FileReader();
+            reader.readAsDataURL(blob); 
+            reader.onloadend = function () { 
+                var base64String = reader.result; 
+                socket.emit('audio_to_server', {'audio_base64':base64String})
+            }
+            socket.on('audio_to_client', function(data){
+                filepath = data['filepath']
+                console.log(filepath)
+                console.log(data['transcript'])
+                document.getElementById("status").innerHTML = 'Trạng thái: <span style="color: mediumseagreen;">Hoàn thành</span>';
+                document.getElementById("transcript").innerText = data['transcript'];
+                recordedAudio.src = data['filepath']
+                recordedAudio.controls=true;
+                recordedAudio.autoplay=true;
+                record.disabled = false;
+                div_upload.style.display = "unset";
+            });
+        };
+
+        processor.onaudioprocess = function (e){
+            console.log("recording")
+            leftchannel.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+            rightchannel.push(new Float32Array(e.inputBuffer.getChannelData(1)));
+            recordingLength += bufferSize;
+        };
+    };
+    
+</script>
+<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+</body>
+</html>

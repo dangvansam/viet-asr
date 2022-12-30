@@ -9,7 +9,7 @@ from nemo.core import DeviceType
 from nemo.core.neural_types import *
 from nemo.utils.decorators import add_port_docs
 from nemo.utils.helpers import get_cuda_device
-
+from pyctcdecode import build_ctcdecoder
 
 class BeamSearchDecoderWithLM(NonTrainableNM):
     """Neural Module that does CTC beam search with a n-gram language model.
@@ -60,19 +60,17 @@ class BeamSearchDecoderWithLM(NonTrainableNM):
         return {"predictions": NeuralType(('B', 'T'), PredictionsType())}
 
     def __init__(
-        self, vocab, beam_width, alpha, beta, lm_path, num_cpus, cutoff_prob=1.0, cutoff_top_n=40, input_tensor=True
+        self,
+        lm_path,
+        vocab,
+        beam_width,
+        alpha,
+        beta,
+        num_cpus,
+        cutoff_prob=1.0,
+        cutoff_top_n=40,
+        input_tensor=True
     ):
-
-        try:
-            from ctc_decoders import Scorer
-            from ctc_decoders import ctc_beam_search_decoder_batch
-        except ModuleNotFoundError:
-            raise ModuleNotFoundError(
-                "BeamSearchDecoderWithLM requires the "
-                "installation of ctc_decoders "
-                "from nemo/scripts/install_decoders.py"
-            )
-
         super().__init__()
         # Override the default placement from neural factory and set placement/device to be CPU.
         self._placement = DeviceType.CPU
@@ -81,8 +79,12 @@ class BeamSearchDecoderWithLM(NonTrainableNM):
         if self._factory.world_size > 1:
             raise ValueError("BeamSearchDecoderWithLM does not run in distributed mode")
 
-        self.scorer = Scorer(alpha, beta, model_path=lm_path, vocabulary=vocab)
-        self.beam_search_func = ctc_beam_search_decoder_batch
+        self.decoder = build_ctcdecoder(
+            vocab,
+            kenlm_model_path=lm_path,  # either .arpa or .bin file
+            alpha=alpha,  # tuned on a val set
+            beta=beta,  # tuned on a val set
+        )
         self.vocab = vocab
         self.beam_width = beam_width
         self.num_cpus = num_cpus
@@ -91,23 +93,10 @@ class BeamSearchDecoderWithLM(NonTrainableNM):
         self.input_tensor = input_tensor
 
     def forward(self, log_probs, log_probs_length):
-        # print(log_probs.shape)
-        #print(log_probs_length.cpu().numpy()[0])
-        probs_list = log_probs
-        if self.input_tensor:
-            probs = torch.exp(log_probs)
-            # print("probs:",probs)
-            probs_list = []
-            for i, prob in enumerate(probs):
-                probs_list.append(prob[: int(log_probs_length[i]), :])
-        
-        res = self.beam_search_func(
-            probs_list,
-            self.vocab,
-            beam_size=self.beam_width,
-            num_processes=self.num_cpus,
-            ext_scoring_func=self.scorer,
-            cutoff_prob=self.cutoff_prob,
-            cutoff_top_n=self.cutoff_top_n,
+        assert log_probs.size(0) == 1, f"log_probs.shape={log_probs.shape}, batch size must be 1"
+        probs = torch.exp(log_probs[0]).cpu().numpy()
+        text = self.decoder.decode(
+            logits=probs,
+            beam_width=self.beam_width
         )
-        return [res]
+        return text
