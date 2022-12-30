@@ -16,11 +16,25 @@ Model was trained with ~500 hours Vietnamese speech dataset, was collected from 
 
 Installation
 ------------
-* ctcdecoder, [kemlm](https://github.com/kpu/kenlm) for LM Decode  
-`pip install ds-ctcdecoder`
-* and some python libraries: `torch, numpy, librosa, flask, flask_socketio, requests,...`
++ Install [python>=3.8](https://www.python.org/downloads/release/python-385/)
++ Install [torch 1.8.1](https://pytorch.org/get-started/previous-versions/#v181):
+```bash
+# cpu only, you can install CUDA version if you have NVidia GPU
+pip install torch==1.8.1+cpu torchvision==0.9.1+cpu torchaudio==0.8.1 -f https://download.pytorch.org/whl/torch_stable.html
+```
 
-Demo
++ Install [kemlm](https://github.com/kpu/kenlm) for LM decoding  
+```bash
+# Windows: Microsoft Visual C++ 14.0 is required
+# Get it with "Build Tools for Visual Studio": https://visualstudio.microsoft.com/downloads
+pip install https://github.com/kpu/kenlm/archive/master.zip
+```
+* and some python libraries: `numpy, librosa, flask, flask_socketio, requests,...`
+```bash
+pip install -r requirements.txt
+```
+
+Run application
 --------
 * Vietnamese Model ([pretrained](model_vietasr2/checkpoints)): `python flask_upload_record_vn.py`  
 * Video demo in Youtube:
@@ -33,10 +47,10 @@ Demo
 
 TODO
 ------
-* Conformer Model  
-* Transformer LM instead of kenlm  
+* Conformer Model
 * Data augumentation: speed, noise, pitch shift, time shift,...  
 * FastAPI
+* Add Dockerfile
 
 Citation
 --------
