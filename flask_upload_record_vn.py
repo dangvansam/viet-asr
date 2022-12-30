@@ -1,75 +1,95 @@
-from flask import Flask, Response, render_template, request, session
-from flask_socketio import SocketIO, send, emit, join_room, leave_room
 import os
 import requests
 import base64
 import time
-from scipy.io.wavfile import write as write_wav
-from infer import restore_model, load_audio
+import librosa
+from flask import Flask, redirect, render_template, request, session
+from flask_socketio import SocketIO, send, emit, join_room, leave_room
+# from scipy.io.wavfile import write as write_wav
+from loguru import logger
+
+from infer import VietASR
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "dangvansam"
 socketio = SocketIO(app)
 
-#đường dẫn tới checkpoint và file config cho model
-config = 'config/quartznet12x1_abcfjwz.yaml'
-encoder_checkpoint = 'model_vietasr/checkpoints/JasperEncoder-STEP-1312684.pt'
-decoder_checkpoint = 'model_vietasr/checkpoints/JasperDecoderForCTC-STEP-1312684.pt'
+config = 'configs/quartznet12x1_vi.yaml'
+encoder_checkpoint = 'models/acoustic_model/vietnamese/JasperEncoder-STEP-289936.pt'
+decoder_checkpoint = 'models/acoustic_model/vietnamese/JasperDecoderForCTC-STEP-289936.pt'
+lm_path = 'models/language_model/3-gram-lm.binary'
 
-neural_factory = restore_model(config, encoder_checkpoint, decoder_checkpoint)
-print('restore model checkpoint done!')
+vietasr = VietASR(
+    config_file=config,
+    encoder_checkpoint=encoder_checkpoint,
+    decoder_checkpoint=decoder_checkpoint,
+    lm_path=lm_path,
+    beam_width=50
+)
+
+STATIC_DIR = "static"
+UPLOAD_DIR = "upload"
+RECORD_DIR = "record"
+
+os.makedirs(os.path.join(STATIC_DIR, UPLOAD_DIR), exist_ok=True)
+os.makedirs(os.path.join(STATIC_DIR, RECORD_DIR), exist_ok=True)
 
 @app.route("/")
 def index():
-    return render_template("socketio_templates/index.html", audio_path=None, async_mode=socketio.async_mode)
+    return render_template(
+        template_name_or_list="index.html",
+        audio_path=None,
+        async_mode=socketio.async_mode
+    )
+
 
 @socketio.on('connect')
 def connected():
-    print("CONNECTED: " + request.sid)
-    emit('to_client', {'text':request.sid})
+    logger.info("CONNECTED: " + request.sid)
+    emit('to_client', {'text': request.sid})
+
 
 @socketio.on('to_server')
 def response_to_client(data):
-    print(data["text"])
-    emit('to_client',{'text':len(data["text"].split())})
-    
+    logger.info(data["text"])
+    emit('to_client', {'text': len(data["text"].split())})
+
+
 @socketio.on('audio_to_server')
-def get_audio(data):
-    #print(data)
+def handle_audio_from_client(data):
     filename = time.strftime("%Y%m%d_%H%M%S")
-    filepath = "static/record/" + filename + ".wav" 
+    filepath = os.path.join(STATIC_DIR, RECORD_DIR, filename + ".wav")
     audio_file = open(filepath, "wb")
     decode_string = base64.b64decode(data["audio_base64"].split(",")[1])
     audio_file.write(decode_string)
-    #asr
-    print("asr processing...")
-    sig = load_audio(filepath)
-    greedy_hypotheses, beam_hypotheses = neural_factory.infer_signal(sig)
-    print('greedy predict:{}'.format(greedy_hypotheses))
-    print('beamLM predict:{}'.format(beam_hypotheses))
-    print("asr completed")
-    emit('audio_to_client', {'text_beamlm': beam_hypotheses, 'text_greedy':greedy_hypotheses, 'filepath':filepath})
+    logger.info("asr processing...")
+    audio_signal, _ = librosa.load(filepath, sr=16000)
+    transcript = vietasr.transcribe(audio_signal)
+    logger.success(f'transcript: {transcript}')
+    emit('audio_to_client', {'filepath': filepath, 'transcript': transcript})
 
-@socketio.on('image-upload')
-def imageUpload(image):
-    emit('send-image', image, broadcast = True)
 
-@app.route('/upload', methods=['POST'])
-def predic_upload():
-    print('upload file')
-    if request.method == 'POST':
+@app.route('/upload', methods=['POST', 'GET'])
+def handle_upload():
+    if request.method == "POST":
         _file = request.files['file']
         if _file.filename == '':
             return index()
-        print('\n\nfile uploaded:',_file.filename)
-        _file.save('static/upload/' + _file.filename)
-        print('Write file success!')
-        sig = load_audio('static/upload/'+ _file.filename)
-        greedy_hypotheses, beam_hypotheses = neural_factory.infer_signal(sig)
-        print('greedy predict:{}'.format(greedy_hypotheses))
-        print('beamLM predict:{}'.format(beam_hypotheses))
-
-        return render_template('socketio_templates/index.html', greedy_predict=greedy_hypotheses, beam_predict=beam_hypotheses, audio_path='static/upload/' + _file.filename)
+        logger.info(f'file uploaded: {_file.filename}')
+        filepath = os.path.join(STATIC_DIR, UPLOAD_DIR, _file.filename)
+        _file.save(filepath)
+        logger.info(f'saved file to: {filepath}')
+        audio_signal, _ = librosa.load(filepath, sr=16000)
+        transcript = vietasr.transcribe(audio_signal)
+        logger.info(f'transcript: {transcript}')
+        return render_template(
+            template_name_or_list='index.html',
+            transcript=transcript,
+            audiopath=filepath
+        )
+    else:
+        return redirect("/")
 
 if __name__ == '__main__':
-    socketio.run(app, host="localhost", port=5000, ssl_context="adhoc", debug=False)
+    socketio.run(app, host="localhost", port=5000,
+                 ssl_context="adhoc", debug=False)
