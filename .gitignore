@@ -1,27 +1,25 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-
-# C extensions
-*.so
-
-# Distribution / packaging
-bin/
-build/
-develop-eggs/
-dist/
-eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-static/*
+dataset/*
+checkpoint
+__pycache__
+*/__pycache__
+venv*
+third_library
+models/*.binary
+exp
+text_analysis
+analysis_features
+models/kmeans
+models/bpe*
+kaldi_src/dataset
+src
+steps
+utils
+*.txt
+*.yaml
+*.pt
+*.arpa
+*.gz
+*.bin
+*.wav
+*.pkl
+outputs
