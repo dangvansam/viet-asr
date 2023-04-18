@@ -30,35 +30,37 @@ class TransformerEncoderLayer(nn.Module):
     __constants__ = ['batch_first']
 
     def __init__(
-            self, 
-            d_model: int, 
-            nhead: int, 
-            type_att: str = "self_att",  # 'self_att' or 'rel_self_att'
-            dim_feedforward: int = 2048, 
-            dropout: float = 0.1, 
-            activation: str = "relu",
-            layer_norm_eps: float = 1e-5,
-            batch_first: bool = True,
-            device: str = None,
-            dtype: str = None,
-            rezero: bool = False
-        ) -> None:
-        
+        self,
+        d_model: int,
+        nhead: int,
+        type_att: str = "self_att",  # 'self_att' or 'rel_self_att'
+        dim_feedforward: int = 2048,
+        dropout: float = 0.1,
+        activation: str = "relu",
+        layer_norm_eps: float = 1e-5,
+        batch_first: bool = True,
+        device: str = None,
+        dtype: str = None
+    ) -> None:
+
         factory_kwargs = {'device': device, 'dtype': dtype}
 
         super(TransformerEncoderLayer, self).__init__()
-        
+
         if type_att == 'self_att':
-            self.self_attn = MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first, **factory_kwargs)
+            self.self_attn = MultiheadAttention(
+                d_model, nhead, dropout=dropout, batch_first=batch_first, **factory_kwargs)
             self.use_rel_attn = False
 
         elif type_att == 'rel_self_att':
-            self.self_attn = Rel_MultiheadAttention(d_model, nhead, dropout= dropout)
+            self.self_attn = Rel_MultiheadAttention(
+                d_model, nhead, dropout=dropout)
             self.use_rel_attn = True
 
         else:
-            raise ValueError("The current version only supports 'self_att' or 'rel_self_att' attention type !")
-        
+            raise ValueError(
+                "The current version only supports 'self_att' or 'rel_self_att' attention type !")
+
         self.type_att = type_att
         # Implementation of Feedforward model
         self.linear1 = Linear(d_model, dim_feedforward, **factory_kwargs)
@@ -72,7 +74,6 @@ class TransformerEncoderLayer(nn.Module):
 
         self.activation = _get_activation_fn(activation)
         self.resweight = nn.Parameter(Tensor([0]))
-        self.rezero = rezero
 
     def __setstate__(self, state):
         if 'activation' not in state:
@@ -93,7 +94,7 @@ class TransformerEncoderLayer(nn.Module):
 
         if not self.use_rel_attn:
             src2 = self.self_attn(src, src, src, attn_mask=src_mask,
-                                key_padding_mask=src_key_padding_mask)[0]
+                                  key_padding_mask=src_key_padding_mask)[0]
         else:
             src2 = self.self_attn(src)
 
@@ -116,7 +117,6 @@ class TransformerEncoderLayer(nn.Module):
         return src
 
 
-
 class TransformerEncoder(nn.Module):
 
     """ Transformer Encoder
@@ -131,34 +131,30 @@ class TransformerEncoder(nn.Module):
     """
 
     def __init__(self,
-            n_layers: int = 6, 
-            d_model: int = 512, 
-            n_head: int = 8, 
-            dropout: float = 0.1, 
-            type_att: str = 'self_att',
-            pre_norm: bool = False,
-            rezero: bool = False,
-            *args, **kwargs
-        ):
+                 n_layers: int = 6,
+                 d_model: int = 512,
+                 n_head: int = 8,
+                 dropout: float = 0.1,
+                 type_att: str = 'self_att',
+                 pre_norm: bool = False,
+                 ):
 
-        super(Encoder, self).__init__()
+        super(TransformerEncoder, self).__init__()
 
-        en_layer = TransformerEncoderLayer(d_model= d_model, nhead= n_head, batch_first= True, 
-                            dropout= dropout, type_att= type_att, rezero= rezero)
-        self.enc = nn.TransformerEncoder(en_layer, num_layers= n_layers)
+        en_layer = TransformerEncoderLayer(d_model=d_model, nhead=n_head, batch_first=True,
+                                           dropout=dropout, type_att=type_att)
+        self.enc = nn.TransformerEncoder(en_layer, num_layers=n_layers)
         self.pre_norm = nn.LayerNorm(d_model)
         self.use_pre_norm = pre_norm
-    
 
-    def forward(self, 
-            feats: Tensor
-        ) -> Tuple[None, Tensor]:
-
+    def forward(self,
+                feats: Tensor
+                ) -> Tuple[None, Tensor]:
         """Transformer encoder forward
 
         Args:
             feats: 3D torch Tensor (B x S x D)
-        
+
         Returns:
             feats: 3D torch Tensor (B x S x D)
 
@@ -170,59 +166,3 @@ class TransformerEncoder(nn.Module):
         feats = self.enc(feats)
 
         return None, feats
-
-
-class InterEncoder(nn.Module):
-
-    """ Transformer InterEncoder
-
-    Args:
-
-        n_layers: the number of encoder layer
-        d_model: input features dimension
-        n_head: transformer attention head
-        dropout: transformer dropout
-        num_intermediate_CTC_layer: the number of layer to compute intermediate CTC
-
-    """
-
-    def __init__(self,
-            n_layers: int = 12, 
-            d_model: int = 512, 
-            n_head: int = 8, 
-            dropout: float = 0.3, 
-            type_att: str = 'self_att',
-            num_intermediate_CTC_layer: int = 6
-        ):
-
-        super(InterEncoder, self).__init__()
-
-        n_continue_layers = n_layers - num_intermediate_CTC_layer
-
-        assert num_intermediate_CTC_layer >= 6, "num_intermediate_CTC_layer must be larger than 6"
-        assert n_continue_layers >= 6, "(n_layers - num_intermediate_CTC_layer) must be greater than or equal to 6 !"
-
-        en_layer = TransformerEncoderLayer(d_model= d_model, nhead= n_head, batch_first= True, dropout= dropout, type_att= type_att)
-
-        self.inter_block =  nn.TransformerEncoder(en_layer, num_layers= num_intermediate_CTC_layer)
-        self.continue_layers = nn.TransformerEncoder(en_layer, num_layers= n_continue_layers)
-    
-
-    def forward(self, 
-            feats: Tensor
-        ) -> Tuple[Tensor, Tensor]:
-
-        """ Transformer InterEncoder Forward
-
-        Args:
-            feats: 3D torch Tensor (B x S x D)
-        
-        Returns:
-            feats: 3D torch Tensor (B x S x D)
-
-        """
-
-        inter_out = self.inter_block(feats)
-        out = self.continue_layers(inter_out)
-
-        return inter_out, out

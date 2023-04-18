@@ -8,9 +8,8 @@ model = Model(2000, **config["model"])
 print(model)
 
 inputs = torch.randn((4, 16000))
-input_lens = torch.LongTensor([16000, 16000, 16000, 16000])
-input_decoder = torch.randint(0, 2000, (4, 5))
-mask = torch.ones_like(input_decoder).bool()
+input_lens = torch.LongTensor([16000, 10000, 12000, 8000])
+target = torch.randint(0, 2000, (4, 5))
+target_lens = torch.LongTensor([5,5,5,5])
 
-print(mask)
-out = model(inputs, input_lens)
+out = model(inputs, input_lens, target, target_lens)
