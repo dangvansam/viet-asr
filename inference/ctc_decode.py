@@ -112,8 +112,8 @@ def test_bpe(
         batch_transcript = list()
         
         with torch.no_grad():
-            encoder_outputs = model.run_encoder(waveforms)
-            encoder_outputs = model.encoder_final_fc(encoder_outputs)
+            encoder_outputs = asr_model.run_encoder(waveforms)
+            encoder_outputs = asr_model.encoder_final_fc(encoder_outputs)
             encoder_outputs = encoder_outputs.log_softmax(2)
             print(encoder_outputs.shape)
 
@@ -207,7 +207,7 @@ if __name__ == '__main__':
         'type_model': args_input['type_model']
     }
 
-    model = load_model(**model_args)
+    asr_model = load_model(**model_args)
 
     run_args = {
         'kenlm_rescore_path': args_input['kenlm_rescore_path'],

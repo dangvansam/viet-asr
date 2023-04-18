@@ -4,7 +4,7 @@ from torch import nn
 from torch import Tensor
 
 
-class SubWord_Embedding(nn.Module):
+class WordEmbedding(nn.Module):
 
     """SubWord embeeding layer
 
@@ -19,7 +19,7 @@ class SubWord_Embedding(nn.Module):
             embed_size: int, 
         ):
 
-        super(SubWord_Embedding, self).__init__()
+        super(WordEmbedding, self).__init__()
 
         self.embedding = nn.Embedding(vocab_size, embedding_dim= embed_size)
         self.factor = math.sqrt(embed_size)

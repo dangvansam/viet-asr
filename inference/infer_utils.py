@@ -12,7 +12,7 @@ from preprocessing.data import ASR_Test_Dataset
 from preprocessing.pre_utils import Test_Loading
 from preprocessing import data
 
-from models import seq2seq, transducer, ensemble_ssl
+from models import asr_model, transducer, ensemble_ssl
 from models.wavlm.model import WavLM, WavLMConfig
 
 from config import load_config
@@ -216,7 +216,7 @@ def average_snapshots(
 
     for snapshot_path in list_of_snapshots_paths:
         
-        model = seq2seq.ASR(vocab, model_params)
+        model = model.ASR(vocab, model_params)
 
         model.load_state_dict(torch.load(snapshot_path, map_location= torch.device(device)), strict= False)
         snapshots_weights[snapshot_path] = model
@@ -241,7 +241,7 @@ def average_snapshots(
             else:
                 avg_state_dict[key] = avg_state_dict[key] / N
     
-    avg_model = seq2seq.ASR(vocab, model_params)
+    avg_model = model.ASR(vocab, model_params)
 
     avg_model.load_state_dict(avg_state_dict)
 
@@ -301,7 +301,7 @@ def init_ensemble_ssl(
     for config, state_dict_path in zip(config_paths, model_state_dict_path):
         tmp_config = load_config.load_yaml(config)
 
-        model = seq2seq.ASR(vocab, tmp_config['model'])
+        model = model.ASR(vocab, tmp_config['model'])
         # model.load_state_dict(torch.load(state_dict_path, map_location= torch.device(device)))
         ssl_models.append(model)
 
@@ -317,7 +317,7 @@ def load_model(
         type_model: str = "seq2seq", # transducer or seq2seq
         num_avg: int = 5,
         *args, **kwargs
-    ) -> Union[seq2seq.ASR, transducer.ASR]:
+    ) -> Union[asr_model.ASR, transducer.ASR]:
 
     if not checkpoint_folder and not model_state_dict_path:
         raise ValueError('checkpoint_folder or model_state_dict_path is require!')
@@ -336,7 +336,7 @@ def load_model(
         torch.save(model, full_model_path)
         print(f"\nSaved {full_model_path}")
     else:
-        model = seq2seq.ASR(vocab, model_params)
+        model = model.ASR(vocab, model_params)
         model.load_state_dict(torch.load(model_state_dict_path, map_location= torch.device(device)))
 
     model = model.to(device)

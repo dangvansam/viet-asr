@@ -6,14 +6,12 @@ import pkbar
 import torch
 from torch.optim import AdamW, Adam
 from torch.optim.optimizer import Optimizer
-from torchsummary import summary
 
 from loss import CrossEntropyLoss, SmoothCrossEntropyLoss, WarmupLR, SmoothCTCLoss
 
-from models import seq2seq, ensemble_ssl
+from models import asr_model
 
 from utils import *
-from logger import *
 from config import load_config
 
 
@@ -23,7 +21,7 @@ def get_loss_factor(ctc_weight: float, att_weight: float) -> Tuple[float, float]
 
 
 def train_on_epoch(
-            training_model: seq2seq.ASR, 
+            training_model: asr_model.ASR, 
             kbar: pkbar.Kbar,
             opt_func: Optimizer, 
             schedulers: WarmupLR,
@@ -136,7 +134,7 @@ def train_on_epoch(
 
 
 def test(
-        training_model: seq2seq.ASR, 
+        training_model: asr_model.ASR, 
         criterion_crossEntropy: Union[CrossEntropyLoss, SmoothCrossEntropyLoss],
         criterion_ctc: SmoothCTCLoss,
         device: str = "cpu", 
@@ -223,7 +221,7 @@ def test(
 
 def train_model(
         vocab: int,
-        training_model: seq2seq.ASR, 
+        training_model: asr_model.ASR, 
         num_epoch: int, 
         pretrained: bool,
         learning_rate: float, 
@@ -291,7 +289,6 @@ def train_model(
             training_model.attention_encoder.requires_grad_(False)
 
     print("\nTraining model is on cuda: {}".format(next(training_model.parameters()).is_cuda))
-    summary(training_model, device= device, input_size= [(2, 100,80), (2, 24)], dtypes=[torch.float, torch.int32], depth= 3)
 
     criterion_crossEntropy = SmoothCrossEntropyLoss(classes= vocab)
     criterion_ctc = SmoothCTCLoss(num_classes= vocab, blank= 0)
@@ -303,7 +300,6 @@ def train_model(
             training_model.requires_grad_(True)
             unfreeze = False
         
-        s2t_writer.log_weights(training_model, epoch + 1)
         kbar = pkbar.Kbar(target=len(training_set_generator) + 1, epoch= epoch, num_epochs= num_epoch, width= 8, always_stateful= True)
 
         train_loss = train_on_epoch(training_model, kbar, opt_func, schedulers, 
@@ -315,8 +311,6 @@ def train_model(
         
         update_checkpoint(training_model, checkpoint_dict, save_folder_path, epoch, num_snapshots)
         
-        s2t_writer.log_done_epoch(train_loss, valid_loss, val_de_acc, epoch + 1)
-    
     return
 
 
@@ -328,22 +322,7 @@ def run(
 
     global vocab, ensemble_training
 
-    if not ensemble_training:
-        training_model = seq2seq.ASR(vocab, model_config['model'])
-    else:
-        config_paths = model_config['model']['config_paths']
-        model_state_dict_path = model_config['model']['model_state_dict_path']
-        ssl_models = nn.ModuleList()
-
-        for config, state_dict_path in zip(config_paths, model_state_dict_path):
-            tmp_config = load_config.load_yaml(config)
-
-            training_model = seq2seq.ASR(vocab, tmp_config['model'])
-            training_model.load_state_dict(torch.load(state_dict_path, map_location= torch.device(args_input.device)))
-            ssl_models.append(training_model)
-
-        training_model = ensemble_ssl.Encoder(vocab, model_config['model']['d_models'], ssl_models)
-        # training_model.ssl_models.requires_grad_(False)
+    training_model = asr_model.ASR(vocab, model_config['model'])
 
     train_params = {
         "save_folder_path": args_input.save_folder_path, 
@@ -361,8 +340,6 @@ def run(
     }
 
     train_model(vocab, training_model, **train_params)
-
-    s2t_writer.close()
 
 
 if __name__ == '__main__':
@@ -439,8 +416,6 @@ if __name__ == '__main__':
 
     # make log dir
     log_dir = os.path.join(save_folder_path, "log")
-    prepare_logdir(log_dir)
-    s2t_writer = S2T_Logger(log_dir)
     model_config = load_config.load_yaml(config_path)
 
     # make data loader
