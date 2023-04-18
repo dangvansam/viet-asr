@@ -117,7 +117,7 @@ class TransformerEncoderLayer(nn.Module):
 
 
 
-class Encoder(nn.Module):
+class TransformerEncoder(nn.Module):
 
     """ Transformer Encoder
 

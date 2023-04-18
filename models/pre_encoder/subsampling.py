@@ -5,7 +5,6 @@ from torch import Tensor
 
 
 class Conv2dSubsampling_2(nn.Module):
-
     """
     Convolutional 2D subsampling (to 1/2 length)
     

@@ -114,13 +114,13 @@ def init_w(m, bias= 1e-04):
 
     if isinstance(m, nn.Conv2d):
         nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('conv2d'))
-        if m.bias.data is not None:
-            m.bias.data.fill_(bias)
+        # if m.bias.data is not None:
+        #     m.bias.data.fill_(bias)
 
     elif isinstance(m, nn.Conv1d):
         nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('conv1d'))
-        if m.bias.data is not None:
-            m.bias.data.fill_(bias)
+        # if m.bias.data is not None:
+        #     m.bias.fill_(bias)
     
     elif isinstance(m, nn.Linear):
         nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('linear'))

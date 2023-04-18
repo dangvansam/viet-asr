@@ -80,8 +80,7 @@ class Extractor(torch.nn.Module):
         '''
 
         with torch.no_grad():
-            B, C, T = waveform.shape
-            waveform = waveform.reshape((B, T))
+            B, T = waveform.shape
             max_frames = int(T/self.hop_length)
 
             features = self.extractor(waveform)
