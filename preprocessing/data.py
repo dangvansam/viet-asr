@@ -1,4 +1,5 @@
-import time, math
+import time
+import math
 from typing import Iterator
 
 import numpy as np
@@ -14,17 +15,17 @@ from preprocessing.augmentation import Augmentor
 
 
 def mask_label(
-        unk_id: int,
-        input_decoder_id: list,
-        prob: float = 0.1,
-    ) -> list:
-    
+    unk_id: int,
+    input_decoder_id: list,
+    prob: float = 0.1,
+) -> list:
+
     N = len(input_decoder_id)
     num_mask = round(0.2*N + 0.5)
 
     if N > 4:
 
-        if np.random.uniform(0,1) < prob:
+        if np.random.uniform(0, 1) < prob:
             tmp = list(range(1, N))     # except start token
             random.shuffle(tmp)
 
@@ -37,24 +38,20 @@ def mask_label(
 
 class ASR_Dataset(Dataset):
 
-    def __init__(self, 
-            meta_dictionary: dict,
-            bpe_model_path: str,
-            type_dataset: str,
-            train_dev_ratio: float = 0.95,
-            hop_length: int = 160,
-            sample_rate: int = 16000,
-            noise_folder_path: str = None,
-            rir_folder_path: str = None,
-            augt_prob: float = 0.7,
-            on_fly_augt: bool = True,
-            *args, **kwargs
-        ) -> None:
-
-        # load word alignments
+    def __init__(self,
+                 meta_dictionary: dict,
+                 bpe_model_path: str,
+                 type_dataset: str,
+                 train_dev_ratio: float = 0.95,
+                 hop_length: int = 160,
+                 sample_rate: int = 16000,
+                 noise_folder_path: str = None,
+                 augt_prob: float = 0.7,
+                 on_fly_augt: bool = True,
+                 *args, **kwargs
+                 ) -> None:
 
         self.train = True
-        self.pseudo = False
         self.meta_dictionary = meta_dictionary
 
         self.wav_paths = list(self.meta_dictionary)
@@ -67,18 +64,17 @@ class ASR_Dataset(Dataset):
 
         if type_dataset == "train":
             self.wav_paths = self.wav_paths[0:break_point]
-        elif type_dataset == "train_pseudo":
-            self.pseudo = True
             pass
         elif type_dataset == "valid":
             self.wav_paths = self.wav_paths[break_point:total_paths]
             self.train = False
         else:
-            raise ValueError("type_dataset does not exist, please choose 'train', 'train_pseudo' or 'valid'!")
-        
+            raise ValueError(
+                "type_dataset does not exist, please choose 'train', 'train_pseudo' or 'valid'!")
+
         # load bpe model
         assert os.path.isfile(bpe_model_path), "BPE model is not exists!"
-        self.bpe_model = spm.SentencePieceProcessor(model_file= bpe_model_path)
+        self.bpe_model = spm.SentencePieceProcessor(model_file=bpe_model_path)
 
         self.encoder_vocab = self.bpe_model.GetPieceSize()
         self.sil_index = self.bpe_model.pad_id()
@@ -89,7 +85,7 @@ class ASR_Dataset(Dataset):
         # augmentation
         self.augt_prob = augt_prob
         self.on_fly_augt = on_fly_augt
-        self.augt = Augmentor(noise_folder_path, rir_folder_path)
+        self.augt = Augmentor(noise_folder_path)
         print("on_fly_augt: ", self.on_fly_augt)
 
         self.length = len(self.wav_paths)
@@ -97,11 +93,11 @@ class ASR_Dataset(Dataset):
         self.data = np.array(self.data)
 
     def assign_label(
-            self,
-            input_decoder_id: str,
-            output_decoder_id: str,
-            duration: float
-        ) -> Tuple[None, list, list]:
+        self,
+        input_decoder_id: str,
+        output_decoder_id: str,
+        duration: float
+    ) -> Tuple[None, list, list]:
         return None, input_decoder_id, output_decoder_id
 
     def __len__(self):
@@ -109,45 +105,35 @@ class ASR_Dataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, index):
-
         'Generates one sample of data'
         wave_path_index = self.data[index]
-
-        # if self.train:
-        #     min_range = max(0, wave_path_index - 64)
-        #     max_range = min(self.length, wave_path_index + 64)
-        #     wave_path_index = np.random.randint(min_range, max_range)
-
         wav_path = self.wav_paths[wave_path_index]
-        
         # Load audio
         waveform, sr = torchaudio.load(wav_path)
-        
         # gen label
         wav_infor_dict = self.meta_dictionary[wav_path]
         label, input_decoder_id, output_decoder_id = self.assign_label(**wav_infor_dict)
 
         if self.train and self.on_fly_augt:
-            waveform = self.augt.augt(waveform, prob= self.augt_prob)
-            input_decoder_id = mask_label(self.unk_id, input_decoder_id)
+            waveform = self.augt.augt(waveform, prob=self.augt_prob)
 
         input_decoder_id = torch.tensor(input_decoder_id)
         output_decoder_id = torch.tensor(output_decoder_id)
-        
-        return waveform, label, self.pad_id, input_decoder_id, output_decoder_id, self.pseudo
+
+        return waveform, label, self.pad_id, input_decoder_id, output_decoder_id
 
 
 class ASR_Dataset_Alignments(Dataset):
 
-    def __init__(self, 
-            word_alignments: dict,
-            bpe_model_path: str,
-            type_dataset: str,
-            train_dev_ratio: float = 0.95,
-            hop_length: int = 160,
-            sample_rate: int = 16000,
-            *args, **kwargs
-        ) -> None:
+    def __init__(self,
+                 word_alignments: dict,
+                 bpe_model_path: str,
+                 type_dataset: str,
+                 train_dev_ratio: float = 0.95,
+                 hop_length: int = 160,
+                 sample_rate: int = 16000,
+                 *args, **kwargs
+                 ) -> None:
 
         # load word alignments
         self.hop_length = hop_length
@@ -171,11 +157,12 @@ class ASR_Dataset_Alignments(Dataset):
             self.wav_paths = self.wav_paths[break_point:total_paths]
             self.train = False
         else:
-            raise ValueError("type_dataset does not exist, please choose 'train' or 'valid'!")
-        
+            raise ValueError(
+                "type_dataset does not exist, please choose 'train' or 'valid'!")
+
         # load bpe model
         assert os.path.isfile(bpe_model_path), "BPE model is not exists!"
-        self.bpe_model = spm.SentencePieceProcessor(model_file= bpe_model_path)
+        self.bpe_model = spm.SentencePieceProcessor(model_file=bpe_model_path)
 
         self.encoder_vocab = self.bpe_model.GetPieceSize()
         self.sil_index = self.bpe_model.pad_id()
@@ -193,126 +180,31 @@ class ASR_Dataset_Alignments(Dataset):
         return self.length
 
     def parse_word_infor(self,
-            word: str,
-            start: float,
-            end: float
-        ) -> tuple:
+                         word: str,
+                         start: float,
+                         end: float
+                         ) -> tuple:
         return word, start, end
-    
-    def assign_label_index(
-            self, 
-            label: list,
-            label_length: int,
-            alignments: list
-        ) -> Tuple[str, list, list]:
-
-        words = list()
-
-        for word_infor in alignments:
-            word, start, end = self.parse_word_infor(**word_infor)
-            if word == "SIL": continue
-
-            words.append(word)
-
-            start = int(start/self.hop_length_seconds)
-            end = int(end/self.hop_length_seconds)
-
-            if start == 0:
-                start_word_index = 0
-            else:
-                start_word_index = self.convert_length(start)
-
-            end_word_index = self.convert_length(end)
-            
-            subwords = self.bpe_model.Encode(word, out_type= int)
-            length_subwords = len(subwords)
-            
-            if length_subwords == 1:
-                # print(label, subwords, start_word_index, end_word_index)
-                label[start_word_index:end_word_index] = subwords[0]
-                end_sw = subwords[0]
-            else:
-                array_list = np.array_split(range(start_word_index, end_word_index), length_subwords)
-                
-                for i, np_array in enumerate(array_list):
-                    if np_array.size == 0: continue
-
-                    begin_sw_index = np_array[0]
-                    end_sw_index = np_array[-1] + 1
-                    end_sw = subwords[i]
-                    label[begin_sw_index : end_sw_index] = end_sw
-        
-        if word != "SIL":
-            label[end_word_index : label_length] = end_sw
-        
-        # gen decoder input and output
-        label_str = ' '.join(words)
-        input_decoder_id = self.bpe_model.Encode(label_str, out_type= int, add_bos= True, add_eos= False)
-        output_decoder_id = self.bpe_model.Encode(label_str, out_type= int, add_bos= False, add_eos= True)
-
-        return label, input_decoder_id, output_decoder_id
-
-    def convert_length(self, length: int) -> int:
-        new_length = math.floor( (length -3)/2 + 1 )
-        new_length = math.floor( (new_length - 3)/2 + 1 )
-        return new_length
-
-    def __getitem__(self, index):
-
-        wave_path_index = self.data[index]
-
-        # if self.train:
-        #     min_range = max(0, wave_path_index - 64)
-        #     max_range = min(self.length, wave_path_index + 64)
-        #     wave_path_index = np.random.randint(min_range, max_range)
-
-        wav_path = self.wav_paths[wave_path_index]
-        alignments = self.word_alignments[wav_path]     # list of dict
-
-        # Load audio
-        waveform, sr = torchaudio.load(wav_path)
-        C, T = waveform.shape
-
-        if T < self.min_wave_length:
-            pad_length = self.min_wave_length - T
-            waveform = pad(waveform, (0, pad_length), value= 0.0)
-            T = self.min_wave_length
-
-        # compute label length
-        length = int(T/self.hop_length)
-        label_length = self.convert_length(length)
-
-        label = [self.sil_index] * label_length
-        label = torch.tensor(label)
-        label, input_decoder_id, output_decoder_id = self.assign_label_index(label, label_length, alignments)
-
-        if self.train:
-            input_decoder_id = mask_label(self.unk_id, input_decoder_id)
-
-        input_decoder_id = torch.tensor(input_decoder_id)
-        output_decoder_id = torch.tensor(output_decoder_id)
-
-        return waveform, label, self.pad_id, input_decoder_id, output_decoder_id
 
 class ASR_Test_Dataset(Dataset):
 
-    def __init__(self, 
-        bpe_model_path: str,
-        meta_test_path: str
-    ) -> None:
+    def __init__(self,
+                 bpe_model_path: str,
+                 meta_test_path: str
+                 ) -> None:
 
         # load bpe model
         assert os.path.isfile(bpe_model_path), "BPE model is not exists!"
-        self.bpe_model = spm.SentencePieceProcessor(model_file= bpe_model_path)
+        self.bpe_model = spm.SentencePieceProcessor(model_file=bpe_model_path)
 
         self.vocab = self.bpe_model.GetPieceSize()
         self.sil_index = self.bpe_model.pad_id()
         self.pad_id = self.bpe_model.eos_id()
-        
+
         self.bos_id = self.bpe_model.bos_id()
         self.eos_id = self.bpe_model.eos_id()
         self.end_of_word = self.bpe_model.bos_id()
-        
+
         assert os.path.isfile(meta_test_path), "meta_test_path is not exists!"
         self.meta = self.load_meta(meta_test_path)
 
@@ -321,30 +213,32 @@ class ASR_Test_Dataset(Dataset):
         self.data = np.array(self.data)
 
     def load_meta(self, meta_test_path: str) -> list:
-        
+
         data = list()
-        
-        with open(meta_test_path, encoding= 'utf8') as fp:
+
+        with open(meta_test_path, encoding='utf8') as fp:
             for line in fp:
                 tokens = line.strip().split("|")
-                
+
                 if len(tokens) != 3:
-                    print('missing line: {line}'.format(line= line))
+                    print('missing line: {line}'.format(line=line))
                     continue
-                
+
                 wav_path, transcript, dur = tokens
                 dur = ast.literal_eval(dur)
-                
+
                 if dur < 1:
-                    print("{wav_path} is too short!".format(wav_path= wav_path))
+                    print("{wav_path} is too short!".format(wav_path=wav_path))
                     continue
-                
+
                 if '111' in transcript:
-                    print("{wav_path}, 111 in script!".format(wav_path= wav_path))
+                    print("{wav_path}, 111 in script!".format(
+                        wav_path=wav_path))
                     continue
-                
+
                 transcript = self.normalize_label(transcript)
-                new_line = "{path}|{label}|{dur}".format(path= wav_path, label= transcript, dur= dur)
+                new_line = "{path}|{label}|{dur}".format(
+                    path=wav_path, label=transcript, dur=dur)
 
                 data.append(new_line)
 
@@ -360,7 +254,7 @@ class ASR_Test_Dataset(Dataset):
     def __len__(self):
         'Denotes the total number of samples'
         return self.length
-    
+
     def __getitem__(self, index):
 
         meta_index = self.data[index]
@@ -379,10 +273,10 @@ class Mix_Dataset(Dataset):
     """
 
     def __init__(
-            self, 
-            dt1: DataLoader, 
-            dt2: DataLoader,
-        ) -> None:
+        self,
+        dt1: DataLoader,
+        dt2: DataLoader,
+    ) -> None:
 
         super(Mix_Dataset, self).__init__()
 
@@ -397,19 +291,19 @@ class Mix_Dataset(Dataset):
         self.data = np.array(self.data)
 
         self.dataloaders1, self.dataloaders2 = iter(dt1), iter(dt2)
-    
 
     def get_batch(
-            self, 
-            iterator: Iterator,
-            use_dt1: bool,
-            use_dt2: bool,
-        ):
-        
+        self,
+        iterator: Iterator,
+        use_dt1: bool,
+        use_dt2: bool,
+    ):
+
         try:
             data = next(iterator)
         except Exception as _:
-            self.dataloaders1, self.dataloaders2 = iter(self.dt1), iter(self.dt2)
+            self.dataloaders1, self.dataloaders2 = iter(
+                self.dt1), iter(self.dt2)
 
             if use_dt1:
                 iterator = self.dataloaders1
@@ -417,21 +311,21 @@ class Mix_Dataset(Dataset):
                 iterator = self.dataloaders2
 
             data = next(iterator)
-        
-        return data
 
+        return data
 
     def __len__(self):
         return len(self.data)
 
-
     def __getitem__(self, index):
 
         if index < self.dt1_length:
-            batch = self.get_batch(self.dataloaders1, use_dt1= True, use_dt2= False)
+            batch = self.get_batch(
+                self.dataloaders1, use_dt1=True, use_dt2=False)
             pseudo_label = False
         else:
-            batch = self.get_batch(self.dataloaders2, use_dt1= False, use_dt2= True)
+            batch = self.get_batch(
+                self.dataloaders2, use_dt1=False, use_dt2=True)
             pseudo_label = True
 
         if batch is None:
@@ -439,15 +333,15 @@ class Mix_Dataset(Dataset):
 
         return batch, pseudo_label
 
-    
+
 class ASR_Dataset_SSL(Dataset):
 
     def __init__(
-            self,
-            wav_paths: list,
-            type_dataset: str,
-            train_dev_ratio: float = 0.95
-        ) -> None:
+        self,
+        wav_paths: list,
+        type_dataset: str,
+        train_dev_ratio: float = 0.95
+    ) -> None:
 
         self.wav_paths = wav_paths
         total_paths = len(self.wav_paths)
@@ -466,9 +360,10 @@ class ASR_Dataset_SSL(Dataset):
             self.wav_paths = self.wav_paths[break_point:total_paths]
 
         else:
-            raise ValueError("type_dataset does not exist, please choose 'train' or 'valid'!")
+            raise ValueError(
+                "type_dataset does not exist, please choose 'train' or 'valid'!")
 
-        self.wav_paths = sorted(self.wav_paths, key= lambda x: x[1])
+        self.wav_paths = sorted(self.wav_paths, key=lambda x: x[1])
         self.wav_paths = [x[0] for x in self.wav_paths]
 
         self.length = len(self.wav_paths)
@@ -487,7 +382,7 @@ class ASR_Dataset_SSL(Dataset):
             min_range = max(0, wave_path_index - 64)
             max_range = min(self.length, wave_path_index + 64)
             wave_path_index = np.random.randint(min_range, max_range)
-            
+
         wav_path = self.wav_paths[wave_path_index]
 
         # Load audio

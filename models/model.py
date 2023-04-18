@@ -3,13 +3,15 @@ from typing import List, Tuple
 from torch import Tensor, nn
 
 # from models.encoder.conformer import ConformerEncoder
-from models.encoder.conformer.encoder import ConformerEncoder 
+from models.encoder.conformer.encoder import ConformerEncoder
 from models.encoder.transformer import TransformerEncoder
-from models.pre_encoder.feature_extraction import Extractor
+from models.pre_encoder.feature_extraction import FeatureExtractor
 from models.pre_encoder.positional_encoding import PositionalEncoding
 from models.pre_encoder.subsampling import Conv2dSubsampling_4
 from models.decoder.transformer import TransformerDecoder
 from models.pre_decoder.embedding import WordEmbedding
+from models.label_smoothing_loss import LabelSmoothingLoss
+from models.ctc import CTC
 from utils import initialize_weights
 
 
@@ -17,6 +19,7 @@ class Model(nn.Module):
     '''
     The Seq2Seq ASR BaseModel
     '''
+
     def __init__(
         self,
         vocab_size: int,
@@ -30,47 +33,46 @@ class Model(nn.Module):
         type_decoder: str = "transformer",
         sinusoidal_pos_enc_style: str = "concat",
         position_dropout: float = 0.1,
-        use_last_dropout: bool = True,
+        ctc_weight: float = 0.5,
+        ctc_linear_dropout: float = 0.1,
+        label_smoothing_weight: float = 0.1,
+        label_smoothing_normalize_length: bool = True
     ):
-
         super(Model, self).__init__()
-
-        # encoder_param, decoder_param, features_extractor_params = encoder_params[0], decoder_params[0], features_extractor_params[0]
         hidden_dim = encoder_params["d_model"]
-        
+
+        self.feature_extractor = FeatureExtractor(**features_extractor_params)
+
         # Encoder
-        self.use_last_dropout = use_last_dropout
-        self.feature_extractor = Extractor(**features_extractor_params)
-
-        # self.subsampling = Conv2dSubsampling_4(
-        #     input_dim=num_mel_bins,
-        #     out_channels=subsampling_channel,
-        #     out_dim=hidden_dim,
-        #     input_dropout_p=subsampling_dropout
-        # )
-
-        # self.pos_encoder = PositionalEncoding(
-        #     hidden_dim,
-        #     position_dropout,
-        #     style=sinusoidal_pos_enc_style
-        # )
-
         if type_encoder == 'conformer':
             # self.encoder = ConformerEncoder(**encoder_params)
+            self.subsampling = None
+            self.pos_encoder = None
             self.encoder = ConformerEncoder(
-                input_dim=encoder_params["d_model"],
+                input_dim=num_mel_bins,
                 encoder_dim=encoder_params["d_model"],
                 num_layers=encoder_params["n_layers"],
                 num_attention_heads=encoder_params["nhead"]
             )
         elif type_encoder == 'transformer':
+            self.subsampling = Conv2dSubsampling_4(
+                input_dim=num_mel_bins,
+                out_channels=subsampling_channel,
+                out_dim=hidden_dim,
+                input_dropout_p=subsampling_dropout
+            )
+            self.pos_encoder = PositionalEncoding(
+                hidden_dim,
+                position_dropout,
+                style=sinusoidal_pos_enc_style
+            )
             self.encoder = TransformerEncoder(**encoder_params)
         else:
-            raise(
+            raise (
                 ValueError, "Current version only support 'conformer', 'transformer' encoder !")
-        
-        self.encoder_final_fc = nn.Linear(hidden_dim, vocab_size)
-        
+
+        self.ctc = CTC(vocab_size, hidden_dim, ctc_linear_dropout)
+
         # Decoder
         self.embed_decoder = WordEmbedding(vocab_size, hidden_dim)
         self.pos_decoder = PositionalEncoding(
@@ -79,27 +81,36 @@ class Model(nn.Module):
         if type_decoder == 'transformer':
             self.decoder = TransformerDecoder(**decoder_params)
         else:
-            raise(ValueError, "Current version only support 'transformer' decoder !")
+            raise (ValueError, "Current version only support 'transformer' decoder !")
 
         self.decode_final_fc = nn.Linear(hidden_dim, vocab_size)
         self.last_dropout_decoder = nn.Dropout(p=0.1)
+        self.label_smoothing_loss = LabelSmoothingLoss(
+            size=vocab_size,
+            padding_idx=vocab_size-1,
+            smoothing=label_smoothing_weight,
+            normalize_length=label_smoothing_normalize_length
+        )
 
         # init weight
-        # initialize_weights(self.subsampling)
-        # initialize_weights(self.pos_encoder)
+        if self.subsampling is not None:
+            initialize_weights(self.subsampling)
+        if self.pos_encoder is not None:
+            initialize_weights(self.pos_encoder)
         initialize_weights(self.encoder)
-        initialize_weights(self.encoder_final_fc)
         initialize_weights(self.embed_decoder)
         initialize_weights(self.pos_decoder)
         initialize_weights(self.decoder)
         initialize_weights(self.decode_final_fc)
 
-    def forward_encoder(self, waveform: Tensor, lengths: Tensor) -> Tensor:
-        x = self.feature_extractor(waveform)
-        # x = self.subsampling(x)
-        # x = self.pos_encoder(x)
-        x, x_lens = self.encoder(waveform, lengths)
-        return x, x_lens
+    def forward_encoder(self, inputs: Tensor, lengths: Tensor) -> Tensor:
+        x, xlens = self.feature_extractor(inputs, lengths)
+        if self.subsampling is not None:
+            x = self.subsampling(x)
+        if self.pos_encoder is not None:
+            x = self.pos_encoder(x)
+        x, xlens = self.encoder(x, xlens)
+        return x, xlens
 
     def forward_decoder(
         self,
@@ -110,9 +121,10 @@ class Model(nn.Module):
     ) -> List[Tensor]:
         y = self.embed_decoder(target)
         y = self.pos_decoder(y)
-        y, attn_output_weights = self.decoder(y, encoder_out, tgt_mask=target_lens)
-        y = self.decode_final_fc(y)
+        print(y.shape)
+        y, attn_output_weights = self.decoder(y, encoder_out, target_lens, encoder_out_lens)
         y = self.last_dropout_decoder(y)
+        y = self.decode_final_fc(y)
         return y, attn_output_weights
 
     def forward(
@@ -139,14 +151,24 @@ class Model(nn.Module):
             SE: encoder sequence length
             SD: decoder sequence length
         '''
-        x = None
         y = None
 
         encoder_out, encoder_out_lens = self.forward_encoder(input, input_lens)
-        x = self.encoder_final_fc(encoder_out)
-
+        ctc_loss = self.ctc(encoder_out, encoder_out_lens, target, target_lens)
+        print("ctc_loss:", ctc_loss)
         if target is not None:
-            y = self.forward_decoder(encoder_out, target, target_lens)
+            y = self.forward_decoder(encoder_out, encoder_out_lens, target, target_lens)
             y = y.permute(0, 2, 1)
+            y = self.decode_final_fc(y)
+            decoder_loss = self.label_smoothing_loss(y, target)
 
-        return x, y
+        result = {
+            "encoder_out": encoder_out,
+            "encoder_out_lens": encoder_out_lens,
+            "ctc_loss": ctc_loss,
+            "decoder_out": y,
+            "decoder_loss": decoder_loss,
+            "decoder_out_lens": target_lens,
+
+        }
+        return result

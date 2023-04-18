@@ -166,15 +166,13 @@ class CMVN(torch.nn.Module):
 
     def __init__(self, 
             infor: Tensor,
-            device: str = "cpu",
             global_norm: bool = True
         ) -> None:
 
         super(CMVN, self).__init__()
         
         if global_norm:
-            self.global_mean_vector = torch.Tensor(infor['global_mean_value']).to(device)
-
+            self.global_mean_vector = torch.Tensor(infor['global_mean_value'])
         self.global_norm = global_norm
 
     def forward(
