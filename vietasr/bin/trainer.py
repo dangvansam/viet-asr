@@ -173,7 +173,7 @@ class ASRTrainer():
         self.model.to(self.device)
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
-        self.epoch.load_state_dict(checkpoint["epoch"])
+        self.epoch = int(checkpoint["epoch"])
         logger.success(f"Loaded checkpoint from: {pretrained_path}")
 
     def run(self, ):

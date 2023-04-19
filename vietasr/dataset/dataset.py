@@ -26,11 +26,9 @@ class ASRDataset(Dataset):
                         continue
                     if not os.path.exists(wav_filepath):
                         print(wav_filepath)
-                        # exit()
                     if len(text.strip()) == 0:
                         continue
                     data.append((line[0], line[1]))
-                    break
         logger.info(f"loaded {len(data)} samples")
         print(data[:10])
         self.data = data
