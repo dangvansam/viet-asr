@@ -38,7 +38,7 @@ dataset:
 train:
   output_dir: exps/vlsp_2022/conformer
   device: gpu
-  num_epoch: 10
+  num_epoch: 50
   warmup_steps: 25000
   lr: 0.001
   weight_decay: 0
