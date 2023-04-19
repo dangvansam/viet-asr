@@ -180,8 +180,7 @@ class ASRModel(nn.Module):
             "encoder_out_lens": encoder_out_lens,
             "ctc_loss": ctc_loss,
             "decoder_out": decoder_out,
-            "decoder_loss": decoder_loss,
             "decoder_out_lens": target_lens,
-
+            "decoder_loss": decoder_loss
         }
         return result

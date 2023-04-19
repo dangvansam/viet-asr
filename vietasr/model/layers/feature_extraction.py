@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 
-from utils import load_json, pad_waveform
+from utils import load_json
 from vietasr.model.model_utils import make_pad_mask
 
 from vietasr.model.layers.transform import (

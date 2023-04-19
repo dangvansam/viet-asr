@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Iterable
 from typing import List
 from typing import Union
-
+import torch
 import sentencepiece as spm
 
 class SentencepiecesTokenizer():
@@ -30,3 +30,9 @@ class SentencepiecesTokenizer():
     def tokens2text(self, tokens: Iterable[str]) -> str:
         self._build_sentence_piece_processor()
         return self.sp.DecodePieces(list(tokens))
+
+    def ids2text(self, ids: List[int]) -> str:
+        self._build_sentence_piece_processor()
+        if isinstance(ids, torch.Tensor):
+            ids = ids.tolist()
+        return self.sp.DecodeIdsWithCheck(ids)
