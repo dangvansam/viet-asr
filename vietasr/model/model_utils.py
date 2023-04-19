@@ -1,33 +1,32 @@
 import torch
 from torch import nn
-from torch import Tensor
 
+def init_w(m, bias= 1e-04):
 
-class Reshape_Layer(nn.Module):
-    """Reshape layer
+    if isinstance(m, nn.Conv2d):
+        nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('conv2d'))
+        # if m.bias.data is not None:
+        #     m.bias.data.fill_(bias)
 
-    Reshape of torch Tensor, (B x S x D) -> (B x D x S)
-
-    B: Batch size
-    S: Sequence length
-    D: Dimension of features
-
-    """
-
-    def __init__(self):
-        super(Reshape_Layer, self).__init__()
-
-    def forward(self, x: Tensor) -> Tensor:
-        """
-        Args:
-            x: 3D torch Tensor with shape (B x S x D)
-
-        Returns:
-            y: 3D torch Tensor with shape (B x D x S)
-
-        """
-        return x.permute(0, 2, 1)
+    elif isinstance(m, nn.Conv1d):
+        nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('conv1d'))
+        # if m.bias.data is not None:
+        #     m.bias.fill_(bias)
     
+    elif isinstance(m, nn.Linear):
+        nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('linear'))
+    
+    elif isinstance(m, nn.Embedding):
+        nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('linear'))
+
+
+def initialize_weights(
+        model: nn.Module, 
+        bias: float = 1e-04
+    ) -> None:
+
+    model.apply(init_w)
+
 def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
     """Make mask tensor containing indices of padded part.
 
@@ -146,5 +145,3 @@ def make_pad_mask(lengths, xs=None, length_dim=-1, maxlen=None):
         )
         mask = mask[ind].expand_as(xs).to(xs.device)
     return mask
-
-

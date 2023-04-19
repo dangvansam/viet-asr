@@ -14,23 +14,26 @@ class WordEmbedding(nn.Module):
 
     """
 
-    def __init__(self, 
-            vocab_size: int, 
-            embed_size: int, 
-        ):
+    def __init__(self,
+                 vocab_size: int,
+                 embed_size: int,
+                 padding_id: int = None
+                 ):
 
         super(WordEmbedding, self).__init__()
 
-        self.embedding = nn.Embedding(vocab_size, embedding_dim= embed_size)
+        self.embedding = nn.Embedding(
+            num_embeddings=vocab_size,
+            embedding_dim=embed_size,
+            padding_idx=padding_id
+        )
         self.factor = math.sqrt(embed_size)
-    
 
     def forward(self, input_decoder: Tensor) -> Tensor:
-
         """
         Args:
             input_decoder: 2D tensor (B, SD)
-        
+
         Returns:
             output_embedding: 3D tensor (B, SD, embed_size)
         """

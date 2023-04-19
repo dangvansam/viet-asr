@@ -7,9 +7,37 @@ from torch import Tensor
 from torch.nn.functional import pad
 from torch.utils.data.dataloader import DataLoader
 
-from preprocessing import data
-from preprocessing.pre_utils import Train_Loading
+# from preprocessing import data
+# from preprocessing.pre_utils import Train_Loading
 
+def pad_list(xs: List[torch.Tensor], pad_value: float, max_len: int = 0) -> torch.Tensor:
+    """Perform padding for the list of tensors.
+
+    Args:
+        xs (List): List of Tensors [(T_1, `*`), (T_2, `*`), ..., (T_B, `*`)].
+        pad_value (float): Value for padding.
+
+    Returns:
+        Tensor: Padded tensor (B, Tmax, `*`).
+
+    Examples:
+        >>> x = [torch.ones(4), torch.ones(2), torch.ones(1)]
+        >>> x
+        [tensor([1., 1., 1., 1.]), tensor([1., 1.]), tensor([1.])]
+        >>> pad_list(x, 0)
+        tensor([[1., 1., 1., 1.],
+                [1., 1., 0., 0.],
+                [1., 0., 0., 0.]])
+
+    """
+    n_batch = len(xs)
+    max_len = max(max_len, max(x.size(0) for x in xs))
+    pad = xs[0].new(n_batch, max_len, *xs[0].size()[1:]).fill_(pad_value)
+
+    for i in range(n_batch):
+        pad[i, : xs[i].size(0)] = xs[i]
+
+    return pad
 
 def pad_waveform(
         sequence_waveform: List[torch.Tensor],
@@ -110,31 +138,6 @@ def update_checkpoint(
         print('Removed old model checkpoint at epoch {}\n'.format(delta))
 
 
-def init_w(m, bias= 1e-04):
-
-    if isinstance(m, nn.Conv2d):
-        nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('conv2d'))
-        # if m.bias.data is not None:
-        #     m.bias.data.fill_(bias)
-
-    elif isinstance(m, nn.Conv1d):
-        nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('conv1d'))
-        # if m.bias.data is not None:
-        #     m.bias.fill_(bias)
-    
-    elif isinstance(m, nn.Linear):
-        nn.init.xavier_uniform_(m.weight, gain=nn.init.calculate_gain('linear'))
-    
-    elif isinstance(m, nn.Embedding):
-        nn.init.xavier_uniform_(m.weight.data, gain=nn.init.calculate_gain('linear'))
-
-
-def initialize_weights(
-        model: nn.Module, 
-        bias: float = 1e-04
-    ) -> None:
-
-    model.apply(init_w)
             
             
 def generate_square_subsequent_mask(sz: int) -> Tensor:
@@ -465,82 +468,3 @@ class Data_Generator:
         vocab = ground_truth_train.encoder_vocab
 
         return vocab, training_set_generator, validate_set_generator
-    
-
-class Data_Generator_SSL:
-    
-    def __init__(
-            self,
-            meta_folder: str,
-            batch_size: int = 16,
-        ) -> None:
-
-        self.meta_folder = meta_folder
-        self.batch_size = batch_size
-
-    def gen_data(self):
-
-        wave_paths = self.load_wav_paths(self.meta_folder)
-        ground_truth_train = data.ASR_Dataset_SSL(wave_paths, type_dataset='train')
-        ground_truth_valid = data.ASR_Dataset_SSL(wave_paths, type_dataset='valid')
-        
-        # training set generator
-        training_set_generator = DataLoader(
-                                ground_truth_train, 
-                                self.batch_size, 
-                                shuffle= False, 
-                                num_workers= 5, 
-                                collate_fn= self.collate_fn, 
-                                pin_memory=False
-                            )
-
-        # validate set generator
-        validate_set_generator = DataLoader(
-                                ground_truth_valid, 
-                                self.batch_size, 
-                                shuffle= False, 
-                                num_workers= 5, 
-                                collate_fn= self.collate_fn, 
-                                pin_memory=False
-                            )
-        return training_set_generator, validate_set_generator
-    
-    def collate_fn(self, batch):
-        waveform_list = list()
-
-        for waveform in batch:
-            waveform_list.append(waveform)
-        
-        length_batch = len(waveform_list)
-        
-        # make waveforms batch
-        waveforms = pad_waveform(waveform_list)
-        waveforms = torch.stack(waveforms, dim= 0)
-
-        return length_batch, waveforms
-
-    def load_wav_paths(
-            self,
-            meta_folder: str,
-            min_dur: float = 0.8,
-            max_dur: float = 16
-        ) -> list:
-
-        meta = list()
-
-        assert os.path.isdir(meta_folder), "Meta folder is not exists!"
-        meta_paths = glob.glob(os.path.join(meta_folder, "*.txt"))
-
-        for path in meta_paths:
-            with open(path, encoding='utf8') as fp:
-                for line in fp:
-                    line = line.strip()
-                    if not line: continue
-
-                    wav_path, label, duration = line.split('|')
-                    duration = ast.literal_eval(duration)
-
-                    if duration < min_dur or duration > max_dur: continue
-                    meta.append([wav_path, duration])
-
-        return meta

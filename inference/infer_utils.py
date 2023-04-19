@@ -12,8 +12,8 @@ from preprocessing.data import ASR_Test_Dataset
 from preprocessing.pre_utils import Test_Loading
 from preprocessing import data
 
-from models import asr_model, transducer, ensemble_ssl
-from models.wavlm.model import WavLM, WavLMConfig
+from vietasr import asr_model, transducer, ensemble_ssl
+from vietasr.wavlm.model import WavLM, WavLMConfig
 
 from config import load_config
 

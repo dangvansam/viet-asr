@@ -5,7 +5,7 @@ from torch import nn
 from torch import Tensor
 from torch.nn import Dropout
 
-from models.attention.rel_self_attention import Rel_MultiheadAttention
+from models.layers.rel_self_attention import Rel_MultiheadAttention
 from utils import initialize_weights
 
 

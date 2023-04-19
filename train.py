@@ -1,32 +1,23 @@
-import os, time
 import argparse
+import os
+import time
 from typing import Tuple, Union
-import pkbar
 
+import pkbar
 import torch
-from torch.optim import AdamW, Adam
+from torch.optim import Adam, AdamW
 from torch.optim.optimizer import Optimizer
 
-from loss import CrossEntropyLoss, SmoothCrossEntropyLoss, WarmupLR, SmoothCTCLoss
-
-from models import asr_model
-
-from utils import *
 from config import load_config
-
-
-
-def get_loss_factor(ctc_weight: float, att_weight: float) -> Tuple[float, float]:
-    return ctc_weight, att_weight
+from vietasr.model import ASRModel
+from utils import *
 
 
 def train_on_epoch(
-            training_model: asr_model.ASR, 
+            training_model: ASRModel, 
             kbar: pkbar.Kbar,
             opt_func: Optimizer, 
             schedulers: WarmupLR,
-            criterion_crossEntropy: Union[CrossEntropyLoss, SmoothCrossEntropyLoss], 
-            criterion_ctc: SmoothCTCLoss,
             device: str = "cpu", 
             acc_steps: int = 4,
             batch_size: int = 16,

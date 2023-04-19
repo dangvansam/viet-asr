@@ -3,21 +3,21 @@ from typing import List, Tuple
 from torch import Tensor, nn
 
 # from models.encoder.conformer import ConformerEncoder
-from models.encoder.conformer.encoder import ConformerEncoder
-from models.encoder.transformer import TransformerEncoder
-from models.pre_encoder.feature_extraction import FeatureExtractor
-from models.pre_encoder.positional_encoding import PositionalEncoding
-from models.pre_encoder.subsampling import Conv2dSubsampling_4
-from models.decoder.transformer import TransformerDecoder
-from models.pre_decoder.embedding import WordEmbedding
-from models.label_smoothing_loss import LabelSmoothingLoss
-from models.ctc import CTC
-from utils import initialize_weights
+from vietasr.model.encoder.conformer.encoder import ConformerEncoder
+from vietasr.model.encoder.transformer import TransformerEncoder
+from vietasr.model.layers.feature_extraction import FeatureExtractor
+from vietasr.model.layers.positional_encoding import PositionalEncoding
+from vietasr.model.layers.subsampling import Conv2dSubsampling_4
+from vietasr.model.decoder.transformer import TransformerDecoder
+from vietasr.model.layers.embedding import WordEmbedding
+from vietasr.model.layers.label_smoothing_loss import LabelSmoothingLoss
+from vietasr.model.layers.ctc import CTC
+from vietasr.model.model_utils import make_pad_mask, initialize_weights
 
 
-class Model(nn.Module):
+class ASRModel(nn.Module):
     '''
-    The Seq2Seq ASR BaseModel
+    ASRModel
     '''
 
     def __init__(
@@ -36,11 +36,16 @@ class Model(nn.Module):
         ctc_weight: float = 0.5,
         ctc_linear_dropout: float = 0.1,
         label_smoothing_weight: float = 0.1,
-        label_smoothing_normalize_length: bool = True
+        label_smoothing_normalize_length: bool = True,
+        blank_id: int = 0,
+        padding_id: int = -1
     ):
-        super(Model, self).__init__()
+        super(ASRModel, self).__init__()
         hidden_dim = encoder_params["d_model"]
-
+        self.ctc_weight = ctc_weight
+        self.blank_id = blank_id
+        self.padding_id = vocab_size - 1
+        
         self.feature_extractor = FeatureExtractor(**features_extractor_params)
 
         # Encoder
@@ -71,10 +76,15 @@ class Model(nn.Module):
             raise (
                 ValueError, "Current version only support 'conformer', 'transformer' encoder !")
 
-        self.ctc = CTC(vocab_size, hidden_dim, ctc_linear_dropout)
+        self.ctc = CTC(
+            odim=vocab_size,
+            encoder_output_size=hidden_dim,
+            dropout_rate=ctc_linear_dropout,
+            blank_id=self.blank_id
+        )
 
         # Decoder
-        self.embed_decoder = WordEmbedding(vocab_size, hidden_dim)
+        self.embed_decoder = WordEmbedding(vocab_size, hidden_dim, self.padding_id)
         self.pos_decoder = PositionalEncoding(
             hidden_dim, position_dropout, style=sinusoidal_pos_enc_style)
 
@@ -83,15 +93,17 @@ class Model(nn.Module):
         else:
             raise (ValueError, "Current version only support 'transformer' decoder !")
 
-        self.decode_final_fc = nn.Linear(hidden_dim, vocab_size)
         self.last_dropout_decoder = nn.Dropout(p=0.1)
+        self.decode_final_fc = nn.Linear(hidden_dim, vocab_size)
+        
+
+        
         self.label_smoothing_loss = LabelSmoothingLoss(
             size=vocab_size,
-            padding_idx=vocab_size-1,
+            padding_idx=self.padding_id,
             smoothing=label_smoothing_weight,
             normalize_length=label_smoothing_normalize_length
         )
-
         # init weight
         if self.subsampling is not None:
             initialize_weights(self.subsampling)
@@ -121,11 +133,10 @@ class Model(nn.Module):
     ) -> List[Tensor]:
         y = self.embed_decoder(target)
         y = self.pos_decoder(y)
-        print(y.shape)
-        y, attn_output_weights = self.decoder(y, encoder_out, target_lens, encoder_out_lens)
+        y = self.decoder(y, encoder_out, make_pad_mask(target_lens), make_pad_mask(encoder_out_lens))
         y = self.last_dropout_decoder(y)
         y = self.decode_final_fc(y)
-        return y, attn_output_weights
+        return y
 
     def forward(
         self,
@@ -151,22 +162,24 @@ class Model(nn.Module):
             SE: encoder sequence length
             SD: decoder sequence length
         '''
-        y = None
 
         encoder_out, encoder_out_lens = self.forward_encoder(input, input_lens)
-        ctc_loss = self.ctc(encoder_out, encoder_out_lens, target, target_lens)
-        print("ctc_loss:", ctc_loss)
+        loss = self.ctc(encoder_out, encoder_out_lens, target, target_lens)
+        ctc_loss = loss
+        
+        decoder_out = None
+        decoder_loss = None
         if target is not None:
-            y = self.forward_decoder(encoder_out, encoder_out_lens, target, target_lens)
-            y = y.permute(0, 2, 1)
-            y = self.decode_final_fc(y)
-            decoder_loss = self.label_smoothing_loss(y, target)
+            decoder_out = self.forward_decoder(encoder_out, encoder_out_lens, target, target_lens)
+            decoder_loss = self.label_smoothing_loss(decoder_out, target)
+            loss = ctc_loss * self.ctc_weight + decoder_loss * (1-self.ctc_weight)
 
         result = {
+            "loss": loss,
             "encoder_out": encoder_out,
             "encoder_out_lens": encoder_out_lens,
             "ctc_loss": ctc_loss,
-            "decoder_out": y,
+            "decoder_out": decoder_out,
             "decoder_loss": decoder_loss,
             "decoder_out_lens": target_lens,
 

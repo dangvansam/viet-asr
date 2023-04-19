@@ -9,7 +9,8 @@ class CTC(torch.nn.Module):
         self,
         odim: int,
         encoder_output_size: int,
-        dropout_rate: float = 0.0,
+        blank_id: int = 0,
+        dropout_rate: float = 0.1,
         reduce: bool = True,
     ):
         """ Construct CTC module
@@ -25,7 +26,7 @@ class CTC(torch.nn.Module):
         self.ctc_lo = torch.nn.Linear(eprojs, odim)
 
         reduction_type = "sum" if reduce else "none"
-        self.ctc_loss = torch.nn.CTCLoss(reduction=reduction_type, zero_infinity=True)
+        self.ctc_loss = torch.nn.CTCLoss(blank=blank_id, reduction=reduction_type, zero_infinity=True)
 
     def forward(
             self,

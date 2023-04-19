@@ -1,12 +1,11 @@
-from typing import Tuple, Optional
-from torch import nn
-from torch import Tensor
+from typing import Optional, Tuple
 
-from torch.nn.modules.transformer import _get_activation_fn, F
+from torch import Tensor, nn
+from torch.nn import Dropout, LayerNorm, Linear
 from torch.nn.modules.activation import MultiheadAttention
-from torch.nn import Linear, LayerNorm, Dropout
+from torch.nn.modules.transformer import F, _get_activation_fn
 
-from models.attention.rel_self_attention import Rel_MultiheadAttention
+from vietasr.model.layers.rel_self_attention import Rel_MultiheadAttention
 
 
 class TransformerEncoderLayer(nn.Module):
