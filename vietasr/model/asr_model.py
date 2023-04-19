@@ -1,5 +1,6 @@
 from typing import List, Tuple
 
+import torch
 from torch import Tensor, nn
 
 # from models.encoder.conformer import ConformerEncoder
@@ -184,3 +185,21 @@ class ASRModel(nn.Module):
             "decoder_loss": decoder_loss
         }
         return result
+    
+    def get_predicts(self, encoder_out: Tensor, encoder_out_lens: Tensor)-> List[List[int]]:
+        with torch.no_grad():
+            ctc_outputs = self.ctc.argmax(encoder_out)
+            predicts = []
+            for i in range(ctc_outputs.size(0)):
+                ctc_out = ctc_outputs[i][: encoder_out_lens[i]].tolist()
+                predicts.append(ctc_out)
+        return predicts
+    
+    def get_labels(self, target: Tensor, target_lens: Tensor)-> List[List[int]]:
+        with torch.no_grad():
+            labels = []
+            for i in range(target.size(0)):
+                t = target[i][: target_lens[i]].tolist()
+                labels.append(t)
+        return labels
+
