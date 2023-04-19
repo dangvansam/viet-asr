@@ -183,4 +183,8 @@ class Conv2dSubampling(nn.Module):
         output_lengths = input_lengths >> 2
         output_lengths -= 1
 
+        max_len = max(output_lengths)
+        if max_len != outputs.size(1):
+            output_lengths[output_lengths == max_len] = outputs.size(1)
+
         return outputs, output_lengths
