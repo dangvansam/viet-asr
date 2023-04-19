@@ -80,7 +80,7 @@ class ASRTrainer():
             
             batch = (b.to(self.device) for b in batch)
 
-            retval = self.model(batch)
+            retval = self.model(*batch)
             loss = retval["loss"]
             loss = loss / self.acc_steps
             loss.backward()
@@ -89,8 +89,8 @@ class ASRTrainer():
 
             if i % self.acc_steps == 0:
                 self.optimizer.step()
-                if self.scheduler is not None:
-                    self.scheduler.step()
+                if self.lr_scheduler is not None:
+                    self.lr_scheduler.step()
                 self.optimizer.zero_grad()
 
             train_loss = loss.detach().item()
@@ -134,7 +134,7 @@ class ASRTrainer():
         # for batch in tqdm(dataloader, desc=f"[TRAIN] EPOCH {epoch}", unit="batch"):
         for i, batch in  enumerate(dataloader):
             batch = (b.to(self.model.device) for b in batch)
-            retval = self.model(batch)
+            retval = self.model(*batch)
             loss = retval["loss"]
 
             valid_loss = loss.detach().item()
