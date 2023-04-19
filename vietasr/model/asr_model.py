@@ -38,8 +38,7 @@ class ASRModel(nn.Module):
         ctc_linear_dropout: float = 0.1,
         label_smoothing_weight: float = 0.1,
         label_smoothing_normalize_length: bool = True,
-        blank_id: int = 0,
-        padding_id: int = -1
+        blank_id: int = 0
     ):
         super(ASRModel, self).__init__()
         hidden_dim = encoder_params["d_model"]
@@ -97,8 +96,6 @@ class ASRModel(nn.Module):
         self.last_dropout_decoder = nn.Dropout(p=0.1)
         self.decode_final_fc = nn.Linear(hidden_dim, vocab_size)
         
-
-        
         self.label_smoothing_loss = LabelSmoothingLoss(
             size=vocab_size,
             padding_idx=self.padding_id,
@@ -148,20 +145,10 @@ class ASRModel(nn.Module):
     ) -> Tuple[Tensor, Tensor]:
         ''' Forward ASR model
         Args:
-            waveform: input waveform, (batch, channel, time)
-            input_decoder: input transformer decoder, (B, SD)
-            tgt_mask: the additive mask for the tgt sequence, (SD, SD) 
-
-        Returns: 
-            (tuple): tuple containing:
-
-            encoder_outputs: output of encoder with shape (B, SE, vocab)
-            decoder_outputs: output of decoder with shape (B, vocab, SD)
-
-        Notes:
-            B: batch_size
-            SE: encoder sequence length
-            SD: decoder sequence length
+            input: input waveform, (batch, time)
+            input: input length, (batch,)
+            target: input transformer decoder, (batch, seq_len)
+            target_lens: target length, (batch,) 
         '''
 
         encoder_out, encoder_out_lens = self.forward_encoder(input, input_lens)
@@ -192,6 +179,7 @@ class ASRModel(nn.Module):
             predicts = []
             for i in range(ctc_outputs.size(0)):
                 ctc_out = ctc_outputs[i][: encoder_out_lens[i]].tolist()
+                ctc_out = [i for i in ctc_out if i != 0]
                 predicts.append(ctc_out)
         return predicts
     
