@@ -87,7 +87,7 @@ class ASRTrainer():
 
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=5.0) 
 
-            if i % self.acc_steps == 0:
+            if (i + 1) % self.acc_steps == 0:
                 self.optimizer.step()
                 if self.lr_scheduler is not None:
                     self.lr_scheduler.step()
@@ -103,8 +103,12 @@ class ASRTrainer():
             # num_words_decoder += batch[3].shape[1] * batch[3].shape[0]
             # decoder_acc += (retval["decoder_out"].argmax(1) == batch[3]).sum().item()
             
-            if i % 100 == 0:
+            if (i + 1) % 100 == 0:
                 logger.info(f"[TRAIN] EPOCH {epoch} | BATCH {i+1}/{num_batch} | loss={train_loss} | ctc_loss={ctc_loss} | decoder_loss={decoder_loss}")
+                predicts = self.model.get_predicts(retval["encoder_out"], retval["encoder_out_lens"])
+                labels = self.model.get_labels(batch[2], batch[3])
+                logger.warning(f"+ Label  : {self.collate_fn.tokenizer.ids2text(labels[0])}")
+                logger.warning(f"+ Predict: {self.collate_fn.tokenizer.ids2text(predicts[0])}")
 
         train_stats = {
             "train_loss": train_loss_epoch / num_batch,
@@ -133,7 +137,7 @@ class ASRTrainer():
 
         # for batch in tqdm(dataloader, desc=f"[TRAIN] EPOCH {epoch}", unit="batch"):
         for i, batch in  enumerate(dataloader):
-            batch = (b.to(self.model.device) for b in batch)
+            batch = (b.to(self.device) for b in batch)
             retval = self.model(*batch)
             loss = retval["loss"]
 
@@ -144,8 +148,12 @@ class ASRTrainer():
             decoder_loss = retval["decoder_loss"].detach().item()
             decoder_loss_epoch += decoder_loss
 
-            if i % 100 == 0:
+            if (i + 1) % 100 == 0:
                 logger.info(f"[VALID] EPOCH {epoch} | BATCH {i+1}/{num_batch} | loss={valid_loss} | ctc_loss={ctc_loss} | decoder_loss={decoder_loss}")
+                predicts = self.model.get_predicts(retval["encoder_out"], retval["encoder_out_lens"])
+                labels = self.model.get_labels(batch[2], batch[3])
+                logger.warning(f"+ Label  : {self.collate_fn.tokenizer.ids2text(labels[0])}")
+                logger.warning(f"+ Predict: {self.collate_fn.tokenizer.ids2text(predicts[0])}")
 
         valid_stats = {
             "valid_loss": valid_loss_epoch / num_batch,
