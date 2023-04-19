@@ -1,5 +1,5 @@
 import torch
-from models.pre_encoder.feature_extraction import FeatureExtractor
+from vietasr.pre_encoder.feature_extraction import FeatureExtractor
 import matplotlib.pyplot as plt
 import numpy as np
 

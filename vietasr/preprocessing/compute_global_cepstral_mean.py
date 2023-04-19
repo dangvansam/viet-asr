@@ -11,7 +11,7 @@ import torchaudio
 
 from execution_time import ExecutionTime
 
-from models.pre_encoder.transform import MelSpectrogram, AmplitudeToDB, RangeNorm
+from vietasr.pre_encoder.transform import MelSpectrogram, AmplitudeToDB, RangeNorm
 
 
 '''

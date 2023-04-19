@@ -36,8 +36,8 @@ class LabelSmoothingLoss(nn.Module):
     def __init__(self,
                  size: int,
                  padding_idx: int,
-                 smoothing: float,
-                 normalize_length: bool = False):
+                 smoothing: float = 0.1,
+                 normalize_length: bool = True):
         """Construct an LabelSmoothingLoss object."""
         super(LabelSmoothingLoss, self).__init__()
         self.criterion = nn.KLDivLoss(reduction="none")

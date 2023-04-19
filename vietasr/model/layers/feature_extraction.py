@@ -1,17 +1,15 @@
 import torch
-import torchaudio
 from torch import Tensor
 
 from utils import load_json, pad_waveform
-from models.utils import make_pad_mask
+from vietasr.model.model_utils import make_pad_mask
 
-from models.pre_encoder.transform import (
+from vietasr.model.layers.transform import (
     CMVN,
     AmplitudeToDB,
     FrequencyMasking,
     MelSpectrogram,
     RangeNorm,
-    ReShape,
     TimeMasking
 )
 
@@ -79,7 +77,8 @@ class FeatureExtractor(torch.nn.Module):
         ''' Features Extraction foward
 
         Args:
-            - waveform (Tensor): Batch of waveform inputs (batch, time)
+            - inputs (Tensor): Batch of waveform inputs (batch, time)
+            - input_lengths (Tensor): Batch of waveform input lengths (batch)
 
         Outputs:
             - Mel-spectrogram (Tensor): Batch of mel-spectrogram (batch, num_frames, num_mels)

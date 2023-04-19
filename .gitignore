@@ -1,19 +1,8 @@
-dataset/*
 checkpoint
 __pycache__
 */__pycache__
 venv*
-third_library
 models/*.binary
-exp
-text_analysis
-analysis_features
-models/kmeans
-models/bpe*
-kaldi_src/dataset
-src
-steps
-utils
 *.txt
 *.yaml
 *.pt
@@ -22,4 +11,3 @@ utils
 *.bin
 *.wav
 *.pkl
-outputs
