@@ -53,6 +53,11 @@ class ASRTrainer():
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.config = config
+        self.epoch = 0
+        self.valid_loss_best = 1000000
+
+        if config["train"].get("pretrained_path"):
+            self.load_pretrained(config["train"].get("pretrained_path"))
 
     def train_one_epoch(self, epoch: int) -> float:
 
@@ -162,6 +167,15 @@ class ASRTrainer():
         }
         return valid_stats
 
+    def load_pretrained(self, pretrained_path: str):
+        checkpoint = torch.load(pretrained_path, map_location="cpu")
+        self.model.load_state_dict(checkpoint["model"])
+        self.model.to(self.device)
+        self.optimizer.load_state_dict(checkpoint["optimizer"])
+        self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+        self.epoch.load_state_dict(checkpoint["epoch"])
+        logger.success(f"Loaded checkpoint from: {pretrained_path}")
+
     def run(self, ):
         
         logger.info("="*40)
@@ -171,10 +185,10 @@ class ASRTrainer():
 
         os.makedirs(self.output_dir, exist_ok=True)
 
-        valid_loss_best = 1000000
+        valid_loss_best = self.valid_loss_best
         valid_acc_best = 0
 
-        for epoch in range(self.num_epoch):
+        for epoch in range(self.epoch, self.num_epoch + 1):
             logger.info(f"[TRAIN] EPOCH {epoch + 1}/{self.num_epoch} START")
             stats = self.train_one_epoch(epoch + 1)
             logger.success(f"[TRAIN] STATS: {stats}")

@@ -36,13 +36,13 @@ dataset:
   num_worker: 4
 
 train:
-  output_dir: exps/test
+  output_dir: exps/vlsp_2022/conformer
   device: gpu
   num_epoch: 10
   warmup_steps: 25000
   lr: 0.001
   weight_decay: 0
   acc_steps: 4
-  pretrained_path: null
+  pretrained_path: exps/vlsp_2022/conformer/checkpoint_epoch_7.pt
 
 
