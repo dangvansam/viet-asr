@@ -20,6 +20,10 @@ class ASRDataset(Dataset):
                     line = line.strip().split("|")
                     wav_filepath = line[0]
                     text = line[1]
+                    dur = float(line[2])
+                    if dur > 12:
+                        print(f"skipped long file, duration={dur}")
+                        continue
                     if not os.path.exists(wav_filepath):
                         print(wav_filepath)
                         # exit()
