@@ -1,6 +1,5 @@
 pybind11
 audiofile==1.0.3
-tqdm==4.62.3
 Cython==0.29.26
 scipy==1.7.3
 sentencepiece==0.1.96
@@ -10,3 +9,5 @@ pyctcdecode==0.1.1
 pyyaml==5.4.1
 unidecode==1.3.4
 omegaconf
+SoundFile==0.10.3.post1
+loguru
