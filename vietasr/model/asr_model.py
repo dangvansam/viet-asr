@@ -113,7 +113,7 @@ class ASRModel(nn.Module):
         initialize_weights(self.decoder)
         initialize_weights(self.decode_final_fc)
 
-    def forward_encoder(self, inputs: Tensor, lengths: Tensor) -> Tensor:
+    def forward_encoder(self, inputs: Tensor, lengths: Tensor=None) -> Tuple[Tensor, Tensor]:
         x, xlens = self.feature_extractor(inputs, lengths)
         if self.subsampling is not None:
             x = self.subsampling(x)
@@ -190,4 +190,3 @@ class ASRModel(nn.Module):
                 t = target[i][: target_lens[i]].tolist()
                 labels.append(t)
         return labels
-
