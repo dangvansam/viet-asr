@@ -36,3 +36,12 @@ class SentencepiecesTokenizer():
         if isinstance(ids, torch.Tensor):
             ids = ids.tolist()
         return self.sp.DecodeIdsWithCheck(ids)
+    
+    def get_vocab(self):
+        self._build_sentence_piece_processor()
+        vocab = [self.sp.id_to_piece(id) for id in range(self.sp.get_piece_size())]
+        return vocab
+    
+    def get_vocab_size(self):
+        self._build_sentence_piece_processor()
+        return self.sp.get_piece_size()
