@@ -11,6 +11,7 @@ from utils import load_yaml
 from vietasr.dataset.dataset import ASRDataset, ASRCollator
 from vietasr.model.asr_model import ASRModel
 from vietasr.utils.lr_scheduler import WarmupLR
+from vietasr.utils.utils import calculate_wer
 
 class ASRTask():
     def __init__(self, config: Union[dict,str], output_dir: str=None, device: str="cpu") -> None:
@@ -18,7 +19,7 @@ class ASRTask():
         if isinstance(config, str):
             config = load_yaml(config)
 
-        self.collate_fn = ASRCollator(bpe_model_path=self.config["dataset"]["bpe_model_path"])
+        self.collate_fn = ASRCollator(bpe_model_path=config["dataset"]["bpe_model_path"])
         self.vocab = self.collate_fn.tokenizer.get_vocab()
 
         model = ASRModel(vocab_size=len(self.vocab), **config["model"])
@@ -31,7 +32,7 @@ class ASRTask():
 
         self.config = config
         self.model = model
-        self.device = torch.device("device")
+        self.device = torch.device(device)
 
     def train_one_epoch(self) -> float:
 
@@ -57,7 +58,7 @@ class ASRTask():
         # for batch in tqdm(dataloader, desc=f"[TRAIN] EPOCH {epoch}", unit="batch"):
         for i, batch in enumerate(dataloader):
             
-            batch = (b.to(self.device) for b in batch)
+            batch = [b.to(self.device) for b in batch]
 
             retval = self.model(*batch)
             loss = retval["loss"]
@@ -82,7 +83,7 @@ class ASRTask():
             # num_words_decoder += batch[3].shape[1] * batch[3].shape[0]
             # decoder_acc += (retval["decoder_out"].argmax(1) == batch[3]).sum().item()
             
-            if (i + 1) % 100 == 0:
+            if (i + 1) % 1 == 0:
                 logger.info(f"[TRAIN] EPOCH {self.epoch} | BATCH {i+1}/{num_batch} | loss={train_loss} | ctc_loss={ctc_loss} | decoder_loss={decoder_loss}")
                 predicts = self.model.get_predicts(retval["encoder_out"], retval["encoder_out_lens"])
                 labels = self.model.get_labels(batch[2], batch[3])
@@ -103,6 +104,8 @@ class ASRTask():
         ctc_loss_epoch = 0
         decoder_loss_epoch = 0
         decoder_acc = 0
+        predicts = []
+        labels = []
 
         dataloader = DataLoader(
             dataset=self.valid_dataset,
@@ -116,7 +119,7 @@ class ASRTask():
 
         # for batch in tqdm(dataloader, desc=f"[TRAIN] EPOCH {epoch}", unit="batch"):
         for i, batch in  enumerate(dataloader):
-            batch = (b.to(self.device) for b in batch)
+            batch = [b.to(self.device) for b in batch]
             retval = self.model(*batch)
             loss = retval["loss"]
 
@@ -127,17 +130,24 @@ class ASRTask():
             decoder_loss = retval["decoder_loss"].detach().item()
             decoder_loss_epoch += decoder_loss
 
+            predict = self.model.get_predicts(retval["encoder_out"], retval["encoder_out_lens"])
+            label = self.model.get_labels(batch[2], batch[3])
+            predict_str = [self.collate_fn.tokenizer.ids2text(x) for x in predict]
+            label_str = [self.collate_fn.tokenizer.ids2text(x) for x in label]
+            predicts += predict_str
+            labels += label_str
+            
             if (i + 1) % 100 == 0:
                 logger.info(f"[VALID] EPOCH {self.epoch} | BATCH {i+1}/{num_batch} | loss={valid_loss} | ctc_loss={ctc_loss} | decoder_loss={decoder_loss}")
-                predicts = self.model.get_predicts(retval["encoder_out"], retval["encoder_out_lens"])
-                labels = self.model.get_labels(batch[2], batch[3])
-                logger.warning(f"+ Label  : {self.collate_fn.tokenizer.ids2text(labels[0])}")
-                logger.warning(f"+ Predict: {self.collate_fn.tokenizer.ids2text(predicts[0])}")
+                logger.warning(f"+ Label  : {label_str[0]}")
+                logger.warning(f"+ Predict: {predict_str[0]}")
 
         valid_stats = {
             "valid_loss": valid_loss_epoch / num_batch,
             "vaid_ctc_loss": ctc_loss_epoch / num_batch,
             "vaid_decoder_loss": decoder_loss_epoch / num_batch,
+            "valid_wer": calculate_wer(predicts, labels),
+            "valid_cer": calculate_wer(predicts, labels, use_cer=True)
         }
         return valid_stats
 
@@ -152,7 +162,7 @@ class ASRTask():
 
     def load_weight(self, weight_path: str):
         weight = torch.load(weight_path, map_location="cpu")
-        self.model.load_state_dict(weight["model"])
+        self.model.load_state_dict(weight)
         self.model.to(self.device)
         logger.success(f"Loaded weight from: {weight_path}")
 
@@ -234,12 +244,15 @@ class ASRTask():
         logger.info(f"+ model_path: {model_path}")
         logger.info(f"+ device: {device}")
         logger.info(f"+ Config: {self.config}")
-
+        
+        batch_size = self.config["dataset"]["batch_size"]
+        num_worker = self.config["dataset"]["num_worker"]
+        
         test_dataset = ASRDataset(test_meta_filepath)
         dataloader = DataLoader(
             dataset=test_dataset,
-            num_workers=self.num_worker,
-            batch_size=self.batch_size,
+            batch_size=batch_size,
+            num_workers=num_worker,
             shuffle=False,
             drop_last=False,
             collate_fn=self.collate_fn
@@ -259,12 +272,14 @@ class ASRTask():
         test_ctc_loss_total = 0
         test_decoder_loss_total = 0
         test_decoder_acc_total = 0
-
+        predicts = []
+        labels = []
+        
         num_batch = len(dataloader)
 
         # for batch in tqdm(dataloader, desc=f"[TRAIN] EPOCH {epoch}", unit="batch"):
         for i, batch in  enumerate(dataloader):
-            batch = (b.to(self.device) for b in batch)
+            batch = [b.to(self.device) for b in batch]
             retval = self.model(*batch)
             loss = retval["loss"]
 
@@ -275,18 +290,24 @@ class ASRTask():
             test_decoder_loss = retval["decoder_loss"].detach().item()
             test_decoder_loss_total += test_decoder_loss
 
-            if (i + 1) % 100 == 0:
-                logger.info(f"[VALID] EPOCH {self.epoch} | BATCH {i+1}/{num_batch} | loss={test_loss} | ctc_loss={test_ctc_loss} | decoder_loss={test_decoder_loss}")
-                predicts = self.model.get_predicts(retval["encoder_out"], retval["encoder_out_lens"])
-                labels = self.model.get_labels(batch[2], batch[3])
-                logger.warning(f"+ Label  : {self.collate_fn.tokenizer.ids2text(labels[0])}")
-                logger.warning(f"+ Predict: {self.collate_fn.tokenizer.ids2text(predicts[0])}")
-
-        valid_stats = {
-            "test_loss": test_loss_total / num_batch,
-            "test_ctc_loss": test_ctc_loss_total / num_batch,
-            "test_decoder_loss": test_decoder_loss_total / num_batch,
-        }
+            predict = self.model.get_predicts(retval["encoder_out"], retval["encoder_out_lens"])
+            label = self.model.get_labels(batch[2], batch[3])
+            predict_str = [self.collate_fn.tokenizer.ids2text(x) for x in predict]
+            label_str = [self.collate_fn.tokenizer.ids2text(x) for x in label]
+            predicts += predict_str
+            labels += label_str
+            
+            if (i + 1) % 10 == 0:
+                logger.info(f"[TEST] BATCH {i+1}/{num_batch} | loss={test_loss} | ctc_loss={test_ctc_loss} | decoder_loss={test_decoder_loss}")
+                logger.warning(f"+ Label  : {label_str[0]}")
+                logger.warning(f"+ Predict: {predict_str[0]}")
+        
+        wer = calculate_wer(predicts, labels)
+        cer = calculate_wer(predicts, labels, use_cer=True)
+        
+        logger.success(f"Test set: {test_meta_filepath} done.")
+        logger.success(f" + CER={cer}%")
+        logger.success(f" + WER={wer}%")
 
     def setup_beamsearch(self):
         kenlm_path = self.config["decode"]["kenlm_path"]

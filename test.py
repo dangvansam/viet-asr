@@ -1,5 +1,5 @@
 import argparse
-from vietasr.bin.asr_task import ASRTask
+from vietasr.asr_task import ASRTask
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

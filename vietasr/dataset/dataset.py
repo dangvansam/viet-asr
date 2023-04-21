@@ -31,6 +31,7 @@ class ASRDataset(Dataset):
                     data.append((line[0], line[1]))
         logger.info(f"loaded {len(data)} samples")
         print(data[:10])
+        
         self.data = data
 
     def __getitem__(self, index):

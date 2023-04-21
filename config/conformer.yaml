@@ -30,19 +30,18 @@ model:
 
 dataset:
   train_filepath: data/train.txt
-  valid_filepath: data/test.txt
+  valid_filepath: data/valid.txt
   bpe_model_path: data/bpe_2000/bpe.model
-  batch_size: 16
+  batch_size: 4
   num_worker: 4
 
 train:
   output_dir: exps/vlsp_2022/conformer
-  device: gpu
   num_epoch: 50
   warmup_steps: 25000
   lr: 0.001
   weight_decay: 0
   acc_steps: 4
-  pretrained_path: exps/vlsp_2022/conformer/checkpoint_epoch_7.pt
+  pretrained_path: null
 
 
