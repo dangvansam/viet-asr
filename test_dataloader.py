@@ -19,4 +19,4 @@ if __name__=='__main__':
         print(x[1].shape)
         print(x[2].shape)
         print(x[3].shape)
-        # break
+        break

@@ -2,6 +2,7 @@ checkpoint
 __pycache__
 */__pycache__
 venv*
+exps*
 models/*.binary
 *.txt
 *.pt
