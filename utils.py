@@ -1,19 +1,18 @@
-import os, json, math, pickle
-from typing import Any, List, Tuple
-
+import json
+import os
 import torch
-from torch import Tensor
-from torch.nn.functional import pad
-from torch.utils.data.dataloader import DataLoader
-
 import yaml
+from typing import List
 
 
-def load_yaml(path):
+def load_config(path):
     with open(path) as file:
         args = yaml.load(file, Loader=yaml.FullLoader)
     return args
 
+def save_config(config: dict, save_path: str):
+    with open(save_path, "w", encoding="utf-8") as f:
+        yaml.dump(config, f)
 
 def pad_list(xs: List[torch.Tensor], pad_value: float, max_len: int = 0) -> torch.Tensor:
     """Perform padding for the list of tensors.

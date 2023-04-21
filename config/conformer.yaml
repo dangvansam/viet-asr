@@ -10,7 +10,7 @@ model:
   position_dropout: 0.15
   encoder_params:
     d_model: 256
-    n_layers: 2
+    n_layers: 8
     nhead: 4
     dropout: 0.1
     conv_kernel_size: 3
@@ -20,7 +20,7 @@ model:
   ctc_weight: 0.5
   ctc_linear_dropout: 0.1
   decoder_params:
-    n_layers: 2
+    n_layers: 4
     d_model: 256
     n_head: 4
     dropout: 0.1
@@ -36,12 +36,18 @@ dataset:
   num_worker: 4
 
 train:
-  output_dir: exps/vlsp_2022/conformer
+  output_dir: exps/vivos/conformer
   num_epoch: 50
-  warmup_steps: 25000
+  warmup_steps: 15000
   lr: 0.001
   weight_decay: 0
-  acc_steps: 4
-  pretrained_path: null
+  acc_steps: 2
+  pretrained_path: null # restore checkpoint for continue training
+
+decode:
+  beamsize: 1
+  kenlm_path: null
+  kenlm_alpha: 0.5
+  kenlm_beta: 1.5
 
 
