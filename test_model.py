@@ -1,8 +1,8 @@
 import torch
 from vietasr.model.asr_model import ASRModel
-from config.load_config import load_yaml
+from utils import load_config
 
-config = load_yaml("config/conformer.yaml")
+config = load_config("config/conformer.yaml")
 
 model = ASRModel(2000, **config["model"])
 print(model)

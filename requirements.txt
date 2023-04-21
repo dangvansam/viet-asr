@@ -11,3 +11,4 @@ unidecode==1.3.4
 omegaconf
 SoundFile==0.10.3.post1
 loguru
+editdistance

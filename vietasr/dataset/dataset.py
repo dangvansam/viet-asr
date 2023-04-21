@@ -22,15 +22,16 @@ class ASRDataset(Dataset):
                     text = line[1]
                     dur = float(line[2])
                     if dur > 12:
-                        print(f"skipped long file, duration={dur}")
+                        logger.warning(f"skipped long file, duration={dur}")
                         continue
                     if not os.path.exists(wav_filepath):
-                        print(wav_filepath)
+                        logger.error(f"file is not exists: {wav_filepath}")
+                        exit()
                     if len(text.strip()) == 0:
                         continue
                     data.append((line[0], line[1]))
         logger.info(f"loaded {len(data)} samples")
-        print(data[:10])
+        print(data[:0])
         
         self.data = data
 

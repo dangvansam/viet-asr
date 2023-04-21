@@ -7,32 +7,36 @@ from torch.utils.data.dataloader import DataLoader
 from loguru import logger
 import numpy as np
 
-from utils import load_yaml
+from utils import load_config, save_config
 from vietasr.dataset.dataset import ASRDataset, ASRCollator
 from vietasr.model.asr_model import ASRModel
 from vietasr.utils.lr_scheduler import WarmupLR
 from vietasr.utils.utils import calculate_wer
 
 class ASRTask():
-    def __init__(self, config: Union[dict,str], output_dir: str=None, device: str="cpu") -> None:
+    def __init__(self, config: str, output_dir: str=None, device: str="cpu") -> None:
 
-        if isinstance(config, str):
-            config = load_yaml(config)
+        config = load_config(config)
 
         self.collate_fn = ASRCollator(bpe_model_path=config["dataset"]["bpe_model_path"])
         self.vocab = self.collate_fn.tokenizer.get_vocab()
 
         model = ASRModel(vocab_size=len(self.vocab), **config["model"])
-        print(model)
+        # print(model)
 
         if output_dir is not None:
             self.output_dir = output_dir
         else:
             self.output_dir = config["train"]["output_dir"]
 
+        self.device = torch.device(device)
+
         self.config = config
         self.model = model
-        self.device = torch.device(device)
+        self.ctc_decoder = None
+        self.optimizer = None
+        self.lr_scheduler = None
+        self.epoch = None
 
     def train_one_epoch(self) -> float:
 
@@ -155,16 +159,13 @@ class ASRTask():
         checkpoint = torch.load(pretrained_path, map_location="cpu")
         self.model.load_state_dict(checkpoint["model"])
         self.model.to(self.device)
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
-        self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
-        self.epoch = int(checkpoint["epoch"])
+        if checkpoint.get("optimizer") and self.optimizer:
+            self.optimizer.load_state_dict(checkpoint["lr_scheduler"])
+        if checkpoint.get("lr_scheduler") and self.lr_scheduler:
+            self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+        if checkpoint.get("epoch") and self.epoch:
+            self.epoch = int(checkpoint["epoch"])
         logger.success(f"Loaded checkpoint from: {pretrained_path}")
-
-    def load_weight(self, weight_path: str):
-        weight = torch.load(weight_path, map_location="cpu")
-        self.model.load_state_dict(weight)
-        self.model.to(self.device)
-        logger.success(f"Loaded weight from: {weight_path}")
 
     def run_train(self):
 
@@ -200,6 +201,8 @@ class ASRTask():
 
         os.makedirs(self.output_dir, exist_ok=True)
 
+        save_config(self.config, os.path.join(self.output_dir, "config.yaml"))
+
         valid_loss_best = self.valid_loss_best
         valid_acc_best = 0
 
@@ -217,7 +220,7 @@ class ASRTask():
                     "valid_loss_best": valid_loss_best
                 },
                 f"{self.output_dir}/checkpoint.pt")
-            torch.save(self.model.state_dict(), f"{self.output_dir}/epoch_{self.epoch}.pt")
+            torch.save({"model": self.model.state_dict()}, f"{self.output_dir}/epoch_{self.epoch}.pt")
                 
             logger.info(f"[TRAIN] EPOCH {epoch + 1}/{self.num_epoch} DONE, Save checkpoint to: {self.output_dir}/checkpoint_epoch_{epoch}.pt")
 
@@ -228,21 +231,23 @@ class ASRTask():
 
             if valid_loss < valid_loss_best:
                 valid_loss_best = valid_loss
-                torch.save(self.model.state_dict(), f"{self.output_dir}/valid_loss_best.pt")
+                torch.save({"model": self.model.state_dict()}, f"{self.output_dir}/valid_loss_best.pt")
                 logger.success(f"saved best model to {self.output_dir}/valid_loss_best.pt")
 
             logger.info(f"[VALID] EPOCH {epoch + 1}/{self.num_epoch} DONE")
 
         logger.success(f"TRAINING ASR MODEL DONE!")
 
-    def run_test(self, test_meta_filepath: str, model_path: str, device: str=None):
+    def run_test(
+            self,
+            test_meta_filepath: str,
+        ):
         
         logger.info("="*40)
         logger.info(f"START TESTING ASR MODEL")
         logger.info("="*40)
         logger.info(f"+ test_meta_filepath: {test_meta_filepath}")
-        logger.info(f"+ model_path: {model_path}")
-        logger.info(f"+ device: {device}")
+        logger.info(f"+ device: {self.device}")
         logger.info(f"+ Config: {self.config}")
         
         batch_size = self.config["dataset"]["batch_size"]
@@ -257,14 +262,6 @@ class ASRTask():
             drop_last=False,
             collate_fn=self.collate_fn
         )
-
-        if device is not None:
-            if device == "cpu":
-                self.device = torch.device("cpu")
-            else:
-                self.device = torch.device(device)
-
-        self.load_weight(model_path)
 
         self.model.eval()
 
@@ -290,11 +287,20 @@ class ASRTask():
             test_decoder_loss = retval["decoder_loss"].detach().item()
             test_decoder_loss_total += test_decoder_loss
 
-            predict = self.model.get_predicts(retval["encoder_out"], retval["encoder_out_lens"])
-            label = self.model.get_labels(batch[2], batch[3])
-            predict_str = [self.collate_fn.tokenizer.ids2text(x) for x in predict]
-            label_str = [self.collate_fn.tokenizer.ids2text(x) for x in label]
+            if self.ctc_decoder is not None:
+                encoder_out = retval["encoder_out"]
+                encoder_out_lens = retval["encoder_out_lens"]
+                predict_str = []
+                for i in range(encoder_out.shape[0]):
+                    predict_str.append(self.ctc_beamsearch(encoder_out[i], encoder_out_lens[i], forward_encoder=False))
+            else:
+                predict = self.model.get_predicts(retval["encoder_out"], retval["encoder_out_lens"])
+                predict_str = [self.collate_fn.tokenizer.ids2text(x) for x in predict]
+            
             predicts += predict_str
+
+            label = self.model.get_labels(batch[2], batch[3])
+            label_str = [self.collate_fn.tokenizer.ids2text(x) for x in label]
             labels += label_str
             
             if (i + 1) % 10 == 0:
@@ -309,11 +315,27 @@ class ASRTask():
         logger.success(f" + CER={cer}%")
         logger.success(f" + WER={wer}%")
 
-    def setup_beamsearch(self):
-        kenlm_path = self.config["decode"]["kenlm_path"]
-        kenlm_alpha = self.config["decode"]["kenlm_alpha"]
-        kenlm_beta = self.config["decode"]["kenlm_beta"]
-        self.beam_size = self.config["decode"]["beam_size"]
+    def setup_beamsearch(
+        self,
+        kenlm_path: str=None,
+        kenlm_alpha: float=None,
+        kenlm_beta: float=None,
+        beam_size: int=1,
+    ):
+        if not kenlm_path:
+            kenlm_path = self.config["decode"].get("kenlm_path")
+        if not kenlm_alpha:
+            kenlm_alpha = self.config["decode"].get("kenlm_alpha")
+        if not kenlm_beta:
+            kenlm_beta = self.config["decode"].get("kenlm_beta")
+        if not beam_size:
+            beam_size = self.config["decode"].get("beam_size")
+
+        if beam_size > 1 and not kenlm_path:
+            logger.error(f"must pass --kenlm_path (or set in config file) for language model, if beamsize > 1")
+            exit()
+
+        self.beam_size = beam_size
 
         from pyctcdecode import build_ctcdecoder
 
@@ -323,15 +345,23 @@ class ASRTask():
             alpha=kenlm_alpha,
             beta=kenlm_beta
         )
+        logger.success("Setup ctc decoder done")
 
-    def ctc_beamsearch(self, input: torch.Tensor, length: torch.Tensor=None):
-        encoder_out, _ = self.forward_encoder(input, length)
-        logit = self.ctc.log_softmax(encoder_out)
+    def ctc_beamsearch(
+            self,
+            encoder_out: torch.Tensor,
+            encoder_out_lens: torch.Tensor,
+        )->str:
+        
+        assert len(input.shape) == 2, input.shape
+        assert input.shape[0] == 1, input.shape
+        assert input.shape[1] == encoder_out_lens[0]
+        logit = self.model.ctc.log_softmax(encoder_out).detach().cpu().squeeze(0).numpy()
         text = self.ctc_decoder.decode(
             logits=logit,
             beam_width=self.beam_size
         )
-        return text
+        return text[0]
 
     def transcribe(self, input: Union[str, np.array, torch.Tensor]) -> str:
         if isinstance(input, str):
@@ -343,6 +373,21 @@ class ASRTask():
             input = input
         else:
             raise NotImplementedError
-        text = self.ctc_beamsearch(input)
+        if len(input.shape) == 1:
+            input = input.unsqueeze(0)
+
+        length = torch.Tensor([input.shape[1]]).long()
+
+        # get encoder out
+        with torch.no_grad():
+            encoder_out, encoder_out_lens = self.model.forward_encoder(input, length)
+
+        # beamsearch decode
+        if self.ctc_decoder is not None:
+            text = self.ctc_beamsearch(encoder_out, encoder_out_lens)
+        else:
+            # greedy decode
+            ids = self.model.get_predicts(encoder_out, encoder_out_lens)[0]
+            text = self.collate_fn.tokenizer.ids2text(ids)
         return text
 
