@@ -20,7 +20,7 @@ class ASRTask():
 
         self.collate_fn = ASRCollator(bpe_model_path=config["dataset"]["bpe_model_path"])
         self.vocab = self.collate_fn.tokenizer.get_vocab()
-
+        self.vocab[0] = "<pad>"
         model = ASRModel(vocab_size=len(self.vocab), **config["model"])
         # print(model)
 
@@ -291,8 +291,8 @@ class ASRTask():
                 encoder_out = retval["encoder_out"]
                 encoder_out_lens = retval["encoder_out_lens"]
                 predict_str = []
-                for i in range(encoder_out.shape[0]):
-                    predict_str.append(self.ctc_beamsearch(encoder_out[i], encoder_out_lens[i], forward_encoder=False))
+                for j in range(encoder_out.shape[0]):
+                    predict_str.append(self.ctc_beamsearch(encoder_out[j].unsqueeze(0), encoder_out_lens[j].unsqueeze(0)))
             else:
                 predict = self.model.get_predicts(retval["encoder_out"], retval["encoder_out_lens"])
                 predict_str = [self.collate_fn.tokenizer.ids2text(x) for x in predict]
@@ -353,15 +353,17 @@ class ASRTask():
             encoder_out_lens: torch.Tensor,
         )->str:
         
-        assert len(input.shape) == 2, input.shape
-        assert input.shape[0] == 1, input.shape
-        assert input.shape[1] == encoder_out_lens[0]
+        encoder_out = encoder_out[:, : encoder_out_lens[0], :]
+        assert len(encoder_out.shape) == 3, encoder_out.shape
+        assert encoder_out.shape[0] == 1, encoder_out.shape
+        assert encoder_out.shape[1] == encoder_out_lens[0]
+
         logit = self.model.ctc.log_softmax(encoder_out).detach().cpu().squeeze(0).numpy()
         text = self.ctc_decoder.decode(
             logits=logit,
             beam_width=self.beam_size
         )
-        return text[0]
+        return text
 
     def transcribe(self, input: Union[str, np.array, torch.Tensor]) -> str:
         if isinstance(input, str):
