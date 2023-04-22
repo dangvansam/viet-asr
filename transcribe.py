@@ -25,7 +25,7 @@ if __name__ == '__main__':
             beam_size=args.beam_size
         )
 
-    result = task.transcribe(input=args.input_file)
+    result = task.transcribe(args.input_file)
 
     print(f"File: {args.input_file}:")
     print(f"Predict: {result}")
