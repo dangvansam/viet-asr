@@ -380,6 +380,9 @@ class ASRTask():
 
         length = torch.Tensor([input.shape[1]]).long()
 
+        input = input.to(self.device)
+        length = length.to(self.device)
+
         # get encoder out
         with torch.no_grad():
             encoder_out, encoder_out_lens = self.model.forward_encoder(input, length)
