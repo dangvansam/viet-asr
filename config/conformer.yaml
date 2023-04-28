@@ -47,6 +47,7 @@ train:
 decode:
   beamsize: 1
   kenlm_path: null
+  word_vocab_path: data/word_vocab.txt
   kenlm_alpha: 0.5
   kenlm_beta: 1.5
 
