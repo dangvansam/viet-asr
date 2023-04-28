@@ -31,7 +31,7 @@ class ASRDataset(Dataset):
                         continue
                     data.append((line[0], line[1]))
         logger.info(f"loaded {len(data)} samples")
-        print(data[:0])
+        print(data[:10])
         
         self.data = data
 
@@ -92,7 +92,9 @@ class ASRCollator():
         
         
         inputs = pad_list(inputs, pad_value=0.0)
-        targets = pad_list(targets, pad_value=self.pad_id)
         input_lens = torch.LongTensor(input_lens)
+        
+        targets = pad_list(targets, pad_value=self.pad_id)
+        target_lens = torch.LongTensor(target_lens)
         
         return inputs, input_lens, targets, target_lens

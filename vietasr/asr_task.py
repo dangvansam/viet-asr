@@ -315,12 +315,15 @@ class ASRTask():
     def setup_beamsearch(
         self,
         kenlm_path: str=None,
+        word_vocab_path: str=None,
         kenlm_alpha: float=None,
         kenlm_beta: float=None,
-        beam_size: int=1,
+        beam_size: int=2,
     ):
         if not kenlm_path:
             kenlm_path = self.config["decode"].get("kenlm_path")
+        if not word_vocab_path:
+            word_vocab_path = self.config["decode"].get("word_vocab_path")
         if not kenlm_alpha:
             kenlm_alpha = self.config["decode"].get("kenlm_alpha")
         if not kenlm_beta:
@@ -339,6 +342,7 @@ class ASRTask():
         self.ctc_decoder = build_ctcdecoder(
             self.vocab,
             kenlm_model_path=kenlm_path,
+            unigrams=word_vocab_path,
             alpha=kenlm_alpha,
             beta=kenlm_beta
         )
