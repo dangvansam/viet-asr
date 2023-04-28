@@ -32,7 +32,7 @@ dataset:
   train_filepath: data/train.txt
   valid_filepath: data/valid.txt
   bpe_model_path: data/bpe_2000/bpe.model
-  batch_size: 4
+  batch_size: 16
   num_worker: 4
 
 train:

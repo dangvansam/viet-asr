@@ -38,13 +38,14 @@ class ASRModel(nn.Module):
         ctc_linear_dropout: float = 0.1,
         label_smoothing_weight: float = 0.1,
         label_smoothing_normalize_length: bool = True,
-        blank_id: int = 0
+        blank_id: int = 0,
+        pad_id: int = -1
     ):
         super(ASRModel, self).__init__()
         hidden_dim = encoder_params["d_model"]
         self.ctc_weight = ctc_weight
         self.blank_id = blank_id
-        self.padding_id = vocab_size - 1
+        self.padding_id = pad_id
         
         self.feature_extractor = FeatureExtractor(**features_extractor_params)
 
@@ -179,7 +180,7 @@ class ASRModel(nn.Module):
             predicts = []
             for i in range(ctc_outputs.size(0)):
                 ctc_out = ctc_outputs[i][: encoder_out_lens[i]].tolist()
-                ctc_out = [i for i in ctc_out if i != 0]
+                ctc_out = [i for i in ctc_out if i not in [self.blank_id, self.padding_id]]
                 predicts.append(ctc_out)
         return predicts
     
