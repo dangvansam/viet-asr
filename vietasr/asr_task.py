@@ -369,27 +369,27 @@ class ASRTask():
         text = text.replace("<blank>", "").strip()
         return text
 
-    def transcribe(self, input: Union[str, np.array, torch.Tensor]) -> str:
-        if isinstance(input, str):
+    def transcribe(self, _input: Union[str, np.array, torch.Tensor]) -> str:
+        if isinstance(_input, str):
             import torchaudio
-            input = torchaudio.load(input)[0]
-        elif isinstance(input, np.array):
-            input = torch.from_numpy(input)
-        elif isinstance(input, torch.Tensor):
-            input = input
+            _input = torchaudio.load(_input)[0]
+        elif isinstance(_input, np.array):
+            _input = torch.from_numpy(_input)
+        elif isinstance(_input, torch.Tensor):
+            _input = _input
         else:
             raise NotImplementedError
-        if len(input.shape) == 1:
-            input = input.unsqueeze(0)
+        if len(_input.shape) == 1:
+            _input = _input.unsqueeze(0)
 
-        length = torch.Tensor([input.shape[1]]).long()
+        length = torch.Tensor([_input.shape[1]]).long()
 
-        input = input.to(self.device)
+        _input = _input.to(self.device)
         length = length.to(self.device)
 
         # get encoder out
         with torch.no_grad():
-            encoder_out, encoder_out_lens = self.model.forward_encoder(input, length)
+            encoder_out, encoder_out_lens = self.model.forward_encoder(_input, length)
 
         # beamsearch decode
         if self.ctc_decoder is not None:
