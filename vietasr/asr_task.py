@@ -365,6 +365,8 @@ class ASRTask():
             logits=logit,
             beam_width=self.beam_size
         )
+        # remove <blank> from text
+        text = text.replace("<blank>", "").strip()
         return text
 
     def transcribe(self, input: Union[str, np.array, torch.Tensor]) -> str:
