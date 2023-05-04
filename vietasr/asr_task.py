@@ -371,10 +371,9 @@ class ASRTask():
 
     def transcribe(self, _input: Union[str, np.array, torch.Tensor]) -> str:
         if isinstance(_input, str):
-            import torchaudio
-            _input = torchaudio.load(_input)[0]
-            if _input.shape[0] == 2:
-                _input = _input[0]
+            import librosa
+            _input = librosa.load(_input, sr=16000, mono=True)[0]
+            _input = torch.from_numpy(_input)
         elif isinstance(_input, np.array):
             _input = torch.from_numpy(_input)
         elif isinstance(_input, torch.Tensor):
