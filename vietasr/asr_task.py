@@ -373,6 +373,8 @@ class ASRTask():
         if isinstance(_input, str):
             import torchaudio
             _input = torchaudio.load(_input)[0]
+            if _input.shape[0] == 2:
+                _input = _input[0]
         elif isinstance(_input, np.array):
             _input = torch.from_numpy(_input)
         elif isinstance(_input, torch.Tensor):
@@ -389,6 +391,12 @@ class ASRTask():
 
         # get encoder out
         with torch.no_grad():
+            self.model.feature_extractor.eval()
+            if self.model.pos_encoder is not None:
+                self.model.pos_encoder.eval()
+            if self.model.subsampling is not None:
+                self.model.subsampling.eval()
+            self.model.ctc.eval()
             encoder_out, encoder_out_lens = self.model.forward_encoder(_input, length)
 
         # beamsearch decode
