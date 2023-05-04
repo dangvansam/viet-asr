@@ -1,0 +1,5 @@
+gTTS
+playsound==1.2.2
+pyaudio
+keyboard
+gradio
