@@ -2,11 +2,11 @@ import os
 from typing import Union
 
 import torch
+import wandb
 from torch.optim import Adam, AdamW
 from torch.utils.data.dataloader import DataLoader
 from loguru import logger
 import numpy as np
-
 from utils import load_config, save_config
 from vietasr.dataset.dataset import ASRDataset, ASRCollator
 from vietasr.model.asr_model import ASRModel
@@ -36,8 +36,27 @@ class ASRTask():
         self.optimizer = None
         self.lr_scheduler = None
         self.epoch = None
+        
+    def init_wandb(self):
+        try:
+            wandb.login()
+        except wandb.errors.UsageError:
+            logger.info("wandb not configured! run `wandb login` to enable")
 
-    def train_one_epoch(self) -> float:
+        if self.config.get("wandb_config"):
+            wandb.init(
+                project=self.config["project"],
+                name=self.config["tag"],
+                id=self.config["tag"],
+                dir=self.config["output_dir"],
+                resume="allow"
+            )
+            
+    def stop_wandb(self):
+        if wandb.run:
+            wandb.finish()
+
+    def train_one_epoch(self) -> dict:
 
         self.model.train()
 
@@ -100,7 +119,7 @@ class ASRTask():
         }
         return train_stats
 
-    def valid_one_epoch(self) -> float:
+    def valid_one_epoch(self) -> dict:
         valid_loss_epoch = 0
         ctc_loss_epoch = 0
         decoder_loss_epoch = 0
@@ -200,15 +219,17 @@ class ASRTask():
         os.makedirs(self.output_dir, exist_ok=True)
 
         save_config(self.config, os.path.join(self.output_dir, "config.yaml"))
-
+        
+        self.init_wandb()
+        
         valid_loss_best = self.valid_loss_best
         valid_acc_best = 0
 
         for epoch in range(self.epoch, self.num_epoch):
             self.epoch = epoch + 1
             logger.info(f"[TRAIN] EPOCH {epoch + 1}/{self.num_epoch} START")
-            stats = self.train_one_epoch()
-            logger.success(f"[TRAIN] STATS: {stats}")
+            train_stats = self.train_one_epoch()
+            logger.success(f"[TRAIN] STATS: {train_stats}")
             torch.save(
                 {
                     "model": self.model.state_dict(),
@@ -223,9 +244,9 @@ class ASRTask():
             logger.info(f"[TRAIN] EPOCH {epoch + 1}/{self.num_epoch} DONE, Save checkpoint to: {self.output_dir}/checkpoint_epoch_{epoch}.pt")
 
             logger.info(f"[VALID] EPOCH {epoch + 1}/{self.num_epoch} START")
-            stats = self.valid_one_epoch()
-            logger.success(f"[VALID] STATS: {stats}")
-            valid_loss = stats["valid_loss"]
+            valid_stats = self.valid_one_epoch()
+            logger.success(f"[VALID] STATS: {valid_stats}")
+            valid_loss = valid_stats["valid_loss"]
 
             if valid_loss < valid_loss_best:
                 valid_loss_best = valid_loss
@@ -233,6 +254,10 @@ class ASRTask():
                 logger.success(f"saved best model to {self.output_dir}/valid_loss_best.pt")
 
             logger.info(f"[VALID] EPOCH {epoch + 1}/{self.num_epoch} DONE")
+
+            wandb.log({"train": train_stats, "valid": valid_stats, "epoch": epoch + 1}, commit=True)
+
+        self.stop_wandb()
 
         logger.success(f"TRAINING ASR MODEL DONE!")
 

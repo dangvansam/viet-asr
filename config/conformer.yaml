@@ -43,6 +43,9 @@ train:
   weight_decay: 0
   acc_steps: 2
   pretrained_path: null # restore checkpoint for continue training
+  wandb_config:
+    project: vivos
+    tag: conformer
 
 decode:
   beamsize: 1
