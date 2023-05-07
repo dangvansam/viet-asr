@@ -85,6 +85,11 @@ class ASRTask():
 
             retval = self.model(*batch)
             loss = retval["loss"]
+            
+            if torch.isnan(loss):
+                self.optimizer.zero_grad()
+                continue
+            
             loss = loss / self.acc_steps
             loss.backward()
 
@@ -147,8 +152,9 @@ class ASRTask():
             collate_fn=self.collate_fn
         )
         num_batch = len(dataloader)
+        
+        self.model.to_eval_mode()
 
-        # for batch in tqdm(dataloader, desc=f"[TRAIN] EPOCH {epoch}", unit="batch"):
         for i, batch in  enumerate(dataloader):
             batch = [b.to(self.device) for b in batch]
             with torch.no_grad():
@@ -252,7 +258,7 @@ class ASRTask():
                 f"{self.output_dir}/checkpoint.pt")
             torch.save({"model": self.model.state_dict()}, f"{self.output_dir}/epoch_{self.epoch}.pt")
                 
-            logger.info(f"[TRAIN] EPOCH {epoch + 1}/{self.num_epoch} DONE, Save checkpoint to: {self.output_dir}/checkpoint_epoch_{epoch}.pt")
+            logger.info(f"[TRAIN] EPOCH {epoch + 1}/{self.num_epoch} DONE, Save checkpoint to: {self.output_dir}/checkpoint_epoch_{self.epoch}.pt")
 
             logger.info(f"[VALID] EPOCH {epoch + 1}/{self.num_epoch} START")
             valid_stats = self.valid_one_epoch()
@@ -306,7 +312,8 @@ class ASRTask():
         
         num_batch = len(dataloader)
 
-        # for batch in tqdm(dataloader, desc=f"[TRAIN] EPOCH {epoch}", unit="batch"):
+        self.model.to_eval_mode()
+
         for i, batch in  enumerate(dataloader):
             batch = [b.to(self.device) for b in batch]
             with torch.no_grad():
@@ -424,14 +431,10 @@ class ASRTask():
         _input = _input.to(self.device)
         length = length.to(self.device)
 
+        self.model.to_eval_mode()
+
         # get encoder out
         with torch.no_grad():
-            self.model.feature_extractor.eval()
-            if self.model.pos_encoder is not None:
-                self.model.pos_encoder.eval()
-            if self.model.subsampling is not None:
-                self.model.subsampling.eval()
-            self.model.ctc.eval()
             encoder_out, encoder_out_lens = self.model.forward_encoder(_input, length)
 
         # beamsearch decode

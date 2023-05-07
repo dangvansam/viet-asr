@@ -195,3 +195,13 @@ class ASRModel(nn.Module):
                 t = target[i][: target_lens[i]].tolist()
                 labels.append(t)
         return labels
+
+    def to_eval_mode(self):
+        self.feature_extractor.eval()
+        if self.pos_encoder is not None:
+            self.pos_encoder.eval()
+        if self.subsampling is not None:
+            self.subsampling.eval()
+        if isinstance(self.encoder, TransformerEncoder):
+            self.encoder.eval()
+        self.ctc.eval()
