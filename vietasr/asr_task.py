@@ -44,13 +44,16 @@ class ASRTask():
             logger.info("wandb not configured! run `wandb login` to enable")
 
         if self.config["train"].get("wandb_config"):
+            os.makedirs(f"{self.output_dir}/tensorboard", exist_ok=True)
+            wandb.tensorboard.patch(root_logdir=f"{self.output_dir}/tensorboard")
             wandb.init(
                 config=self.config,
                 project=self.config["train"]["wandb_config"]["project"],
                 name=self.config["train"]["wandb_config"]["tag"],
                 id=self.config["train"]["wandb_config"]["tag"],
                 dir=self.config["train"]["output_dir"],
-                resume="allow"
+                resume="allow",
+                sync_tensorboard=True
             )
             
     def stop_wandb(self):
