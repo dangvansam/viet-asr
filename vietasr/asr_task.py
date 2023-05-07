@@ -111,6 +111,16 @@ class ASRTask():
                 labels = self.model.get_labels(batch[2], batch[3])
                 logger.warning(f"+ Label  : {self.collate_fn.ids2text(labels[0])}")
                 logger.warning(f"+ Predict: {self.collate_fn.ids2text(predicts[0])}")
+                wandb.log(
+                    {
+                        "train": {
+                            "train_loss": train_loss,
+                            "ctc_loss": ctc_loss,
+                            "ctc_loss": ctc_loss
+                        },
+                        "step": (self.epoch - 1) * num_batch + i + 1
+                    }
+                )
 
         train_stats = {
             "train_loss": train_loss_epoch / num_batch,
@@ -255,7 +265,7 @@ class ASRTask():
 
             logger.info(f"[VALID] EPOCH {epoch + 1}/{self.num_epoch} DONE")
 
-            wandb.log({"train": train_stats, "valid": valid_stats, "epoch": epoch + 1}, commit=True)
+            wandb.log({"train": train_stats, "valid": valid_stats, "epoch": self.epoch}, commit=True)
 
         self.stop_wandb()
 
