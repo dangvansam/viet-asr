@@ -43,12 +43,13 @@ class ASRTask():
         except wandb.errors.UsageError:
             logger.info("wandb not configured! run `wandb login` to enable")
 
-        if self.config.get("wandb_config"):
+        if self.config["train"].get("wandb_config"):
             wandb.init(
-                project=self.config["project"],
-                name=self.config["tag"],
-                id=self.config["tag"],
-                dir=self.config["output_dir"],
+                config=self.config,
+                project=self.config["train"]["wandb_config"]["project"],
+                name=self.config["train"]["wandb_config"]["tag"],
+                id=self.config["train"]["wandb_config"]["tag"],
+                dir=self.config["train"]["output_dir"],
                 resume="allow"
             )
             
