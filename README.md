@@ -6,7 +6,7 @@ Model: [QuartzNet](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/
 
 The pretrained model on this repo was trained with ~100 hours Vietnamese speech dataset, was collected from youtube, radio, call center(8k), text to speech data and some public dataset (vlsp, vivos, fpt). It is very small model (13M parameters) make it inference so fast ⚡  
 
-🌱 _Update: The new version available on [`branh v2.0`](https://github.com/dangvansam/viet-asr/tree/v2.0) is built from scratch with PyTorch_
+🌱 _Update: The new version available on [`branch v2.0`](https://github.com/dangvansam/viet-asr/tree/v2.0) is built from scratch with PyTorch_
 
 Installation
 ------------
