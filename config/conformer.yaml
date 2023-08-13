@@ -3,11 +3,11 @@ model:
     global_cmvn_path: null
   num_mel_bins: 80
   subsampling_channel: 256
-  subsampling_dropout: 0.15
+  subsampling_dropout: 0.1
   type_encoder: 'conformer'
   type_decoder: 'transformer'
   sinusoidal_pos_enc_style: add
-  position_dropout: 0.15
+  position_dropout: 0.1
   encoder_params:
     d_model: 256
     n_layers: 8
@@ -18,7 +18,7 @@ model:
     ffn_mult: 2
     pre_norm: True
   ctc_weight: 0.5
-  ctc_linear_dropout: 0.1
+  ctc_linear_dropout: 0.05
   decoder_params:
     n_layers: 4
     d_model: 256
@@ -43,6 +43,9 @@ train:
   weight_decay: 0
   acc_steps: 2
   pretrained_path: null # restore checkpoint for continue training
+  wandb_config:
+    project: vivos
+    tag: conformer
 
 decode:
   beamsize: 1

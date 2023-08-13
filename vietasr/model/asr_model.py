@@ -29,13 +29,13 @@ class ASRModel(nn.Module):
         features_extractor_params: dict,
         num_mel_bins: int = 80,
         subsampling_channel: int = 256,
-        subsampling_dropout: float = 0.1,
+        subsampling_dropout: float = 0.0,
         type_encoder: str = "conformer",
         type_decoder: str = "transformer",
         sinusoidal_pos_enc_style: str = "concat",
-        position_dropout: float = 0.1,
+        position_dropout: float = 0.0,
         ctc_weight: float = 0.5,
-        ctc_linear_dropout: float = 0.1,
+        ctc_linear_dropout: float = 0.0,
         label_smoothing_weight: float = 0.1,
         label_smoothing_normalize_length: bool = True,
         blank_id: int = 0,
@@ -58,7 +58,11 @@ class ASRModel(nn.Module):
                 input_dim=num_mel_bins,
                 encoder_dim=encoder_params["d_model"],
                 num_layers=encoder_params["n_layers"],
-                num_attention_heads=encoder_params["nhead"]
+                num_attention_heads=encoder_params["nhead"],
+                input_dropout_p=0,
+                feed_forward_dropout_p=0,
+                attention_dropout_p=0,
+                conv_dropout_p=0
             )
         elif type_encoder == 'transformer':
             self.subsampling = Conv2dSubsampling_4(
@@ -191,3 +195,13 @@ class ASRModel(nn.Module):
                 t = target[i][: target_lens[i]].tolist()
                 labels.append(t)
         return labels
+
+    def to_eval_mode(self):
+        self.feature_extractor.eval()
+        if self.pos_encoder is not None:
+            self.pos_encoder.eval()
+        if self.subsampling is not None:
+            self.subsampling.eval()
+        if isinstance(self.encoder, TransformerEncoder):
+            self.encoder.eval()
+        self.ctc.eval()

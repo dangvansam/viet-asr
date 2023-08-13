@@ -3,11 +3,12 @@ __pycache__
 */__pycache__
 venv*
 exps*
+data/*
 models/*.binary
 *.txt
 *.pt
 *.arpa
 *.gz
 *.bin
-*.wav
 *.pkl
+*.csv
