@@ -1,12 +1,28 @@
-# VietASR (Vietnamese Automatic Speech Recognition)
-------
-⚡ Some experiment with [NeMo](https://github.com/NVIDIA/NeMo) ⚡  
+<p align="center">
+  <img src="assets/viet-asr-logo.png" style="width: 22%">
+  <h1 align="center"style="color: white; font-weight: bold; font-family:roboto"><span style="color: white; font-weight: bold; font-family:roboto">VietASR</span>: An Open-Source Vietnamese Speech to Text</h1>
+</p>
+<p align="center">
+  <a href="https://github.com/dangvansam/viet-asr"><img src="https://img.shields.io/github/stars/dangvansam/viet-asr?style=social"></a>
+    <a href="https://github.com/dangvansam/viet-tts"><img src="https://img.shields.io/badge/Python-3.10-green"></a>
+    <!-- <a href="https://pypi.org/project/viet-tts" target="_blank"><img src="https://img.shields.io/pypi/v/viet-tts.svg" alt="PyPI Version"> -->
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/dangvansam/viet-asr"></a>
+    </a>
+    <br>
+    <a href="README.md"><img src="https://img.shields.io/badge/README-English-blue"></a>
+    <a href="README_VN.md"><img src="https://img.shields.io/badge/README-Tiếng Việt-red"></a>
+  <a href="https://github.com/dangvansam/viet-tts"><img src="https://img.shields.io/badge/Text to Speech-viet--tts-green"></a>
+    <br>
+</p>
 
-Model: [QuartzNet](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/models.html#quartznet) is a smaller version of [Jaser](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/models.html#jasper)  model  
+🚀 Some experiment with [NeMo](https://github.com/NVIDIA/NeMo),
+ASR use [QuartzNet](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/models.html#quartznet) model is a smaller version of [Jaser](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/main/asr/models.html#jasper) model.
 
 The pretrained model on this repo was trained with ~100 hours Vietnamese speech dataset, was collected from youtube, radio, call center(8k), text to speech data and some public dataset (vlsp, vivos, fpt). It is very small model (13M parameters) make it inference so fast ⚡  
 
 🌱 _Update: The new version available on [`branch v2.0`](https://github.com/dangvansam/viet-asr/tree/v2.0) is built from scratch with PyTorch_
+
+🌱 _For Text to Speech, visit [`VietTTS`](https://github.com/dangvansam/viet-tts) repo_
 
 Installation
 ------------
