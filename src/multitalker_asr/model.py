@@ -1,6 +1,6 @@
 import os
 import torch
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 from omegaconf import OmegaConf, open_dict
 from loguru import logger
 
@@ -132,15 +132,25 @@ class MultitalkerASRModel:
 
     def finetune(self, train_cfg: TrainingConfig):
         """Fine-tunes the ASR model."""
-        if self.asr_model is None:
+        if self.asr_model == None:
             self.load_models()
 
         cfg = self.asr_model.cfg
         with open_dict(cfg):
-            cfg.train_ds.manifest_filepath = train_cfg.train_manifest
+            cfg.train_ds.cuts_path = train_cfg.train_manifest
+            cfg.train_ds.manifest_filepath = None
             cfg.train_ds.batch_size = train_cfg.batch_size
-            cfg.validate_ds = cfg.train_ds.copy()
-            cfg.validate_ds.manifest_filepath = train_cfg.val_manifest
+            cfg.train_ds.text_field = "text"
+            cfg.train_ds.use_lhotse = True
+
+            if not hasattr(cfg, 'validate_ds') or cfg.validate_ds is None:
+                cfg.validate_ds = cfg.train_ds.copy()
+
+            cfg.validate_ds.cuts_path = train_cfg.val_manifest
+            cfg.validate_ds.manifest_filepath = None
+            cfg.validate_ds.text_field = "text"
+            cfg.validate_ds.batch_size = train_cfg.batch_size
+            cfg.validate_ds.use_lhotse = True
 
             # Optimization
             cfg.optim.lr = train_cfg.learning_rate
@@ -151,24 +161,30 @@ class MultitalkerASRModel:
             val_data_config=cfg.validate_ds)
         self.asr_model.setup_optimization(optim_config=cfg.optim)
 
+        # Disable CUDA graphs for stability
+        if hasattr(self.asr_model, 'cfg'):
+            with open_dict(self.asr_model.cfg):
+                self.asr_model.cfg.enable_cuda_graphs = False
+
         trainer = pl.Trainer(
             devices=1,
             accelerator='gpu' if torch.cuda.is_available(
             ) and self.model_cfg.cuda_id >= 0 else 'cpu',
             max_steps=train_cfg.max_steps,
             accumulate_grad_batches=train_cfg.accumulate_grad_batches,
-            precision=train_cfg.precision,
+            precision=32,
             val_check_interval=train_cfg.val_check_interval,
             enable_checkpointing=True,
             default_root_dir="checkpoints",
         )
 
         self.asr_model.set_trainer(trainer)
-
-        # Patch annoying PyTorch Lightning version inheritance mismatch
-        import pytorch_lightning.trainer.trainer as pl_trainer
+        # Use lightning.pytorch
+        import lightning.pytorch.trainer.trainer as pl_trainer
         pl_trainer._maybe_unwrap_optimized = lambda x: x
 
+        # Ensure model is in training mode
+        self.asr_model.train()
         trainer.fit(self.asr_model)
 
         save_path = self.model_cfg.asr_model_path.replace(

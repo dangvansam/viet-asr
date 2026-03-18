@@ -17,7 +17,7 @@ dependencies = [
     "pyctcdecode>=0.5.0",
     "python-dateutil>=2.9.0.post0",
     "python-socketio>=5.16.1",
-    "pytorch-lightning>=2.0",
+    "pytorch-lightning==1.9.5",
     "requests>=2.32.5",
     "ruamel-yaml>=0.19.1",
     "setuptools>=82.0.1",
