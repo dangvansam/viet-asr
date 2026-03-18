@@ -96,9 +96,12 @@ class MultitalkerASRModel:
         streaming_buffer.append_audio_file(
             audio_filepath=audio_path, stream_id=-1)
 
-        # Wrapped NeMo streamer logic
+        # Convert dataclass to a flexible OmegaConf object for NeMo compatibility
+        # Using to_container ensures it's a plain dict-based config that allows missing keys
+        nemo_cfg = OmegaConf.create(OmegaConf.to_container(
+            OmegaConf.structured(cfg), resolve=True))
         multispk_asr_streamer = SpeakerTaggedASR(
-            cfg, self.asr_model, self.diar_model)
+            nemo_cfg, self.asr_model, self.diar_model)
 
         # Using parallelism as it's the recommended strategy for Multitalker
         autocast = torch.amp.autocast(self.asr_model.device.type, enabled=True)
