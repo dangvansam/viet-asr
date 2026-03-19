@@ -25,6 +25,12 @@ Usage:
         --output_model checkpoints/multitalker-vietnamese-scratch.nemo
 """
 
+import json
+from omegaconf import open_dict
+from loguru import logger
+import torch.nn as nn
+import torch
+from nemo.collections.asr.models import ASRModel
 import argparse
 import sys
 from pathlib import Path
@@ -32,12 +38,6 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from nemo.collections.asr.models import ASRModel
-import torch
-import torch.nn as nn
-from loguru import logger
-from omegaconf import open_dict
-import json
 
 def replace_tokenizer_mode(base_model_path, vietnamese_tokenizer_path, output_path, vocab_size):
     """
@@ -75,10 +75,12 @@ def replace_tokenizer_mode(base_model_path, vietnamese_tokenizer_path, output_pa
 
     # Step 1: Replace tokenizer
     logger.info("Step 1: Replacing tokenizer with Vietnamese-only...")
-    new_tokenizer = SentencePieceTokenizer(model_path=vietnamese_tokenizer_path)
+    new_tokenizer = SentencePieceTokenizer(
+        model_path=vietnamese_tokenizer_path)
 
     if new_tokenizer.vocab_size != vocab_size:
-        logger.warning(f"Tokenizer vocab size mismatch: {new_tokenizer.vocab_size} != {vocab_size}")
+        logger.warning(
+            f"Tokenizer vocab size mismatch: {new_tokenizer.vocab_size} != {vocab_size}")
         logger.warning("Using tokenizer's vocab size...")
         vocab_size = new_tokenizer.vocab_size
         new_vocab_size = vocab_size + 1
@@ -123,9 +125,27 @@ def replace_tokenizer_mode(base_model_path, vietnamese_tokenizer_path, output_pa
     logger.info("Step 4: Updating model configuration...")
     with open_dict(asr_model.cfg):
         asr_model.cfg.decoder.vocab_size = new_vocab_size
+        if 'vocabulary' in asr_model.cfg.decoder:
+            asr_model.cfg.decoder.pop('vocabulary')
+
         asr_model.cfg.joint.num_classes = new_vocab_size
+        if 'vocabulary' in asr_model.cfg.joint:
+            asr_model.cfg.joint.pop('vocabulary')
+
         if hasattr(asr_model.cfg, 'tokenizer'):
             asr_model.cfg.tokenizer.vocab_size = vocab_size
+            if 'vocab_path' in asr_model.cfg.tokenizer:
+                asr_model.cfg.tokenizer.pop('vocab_path')
+            if 'spe_tokenizer_vocab' in asr_model.cfg.tokenizer:
+                asr_model.cfg.tokenizer.pop('spe_tokenizer_vocab')
+
+            import os
+            new_path = os.path.abspath(vietnamese_tokenizer_path)
+            asr_model.cfg.tokenizer.model_path = new_path
+            try:
+                asr_model.register_artifact("tokenizer.model_path", new_path)
+            except Exception as e:
+                logger.warning(f"Could not register artifact: {e}")
 
     logger.success("Model configuration updated")
 
@@ -137,9 +157,12 @@ def replace_tokenizer_mode(base_model_path, vietnamese_tokenizer_path, output_pa
     logger.success("Vietnamese-only model created successfully!")
     logger.success("=" * 60)
     logger.success(f"Vocabulary: {old_vocab_size - 1} → {vocab_size} tokens")
-    logger.success(f"Decoder embedding: {old_embed.weight.shape} → {new_embed.weight.shape}")
-    logger.success(f"Joint output: {old_linear.weight.shape} → {new_linear.weight.shape}")
-    logger.success(f"Encoder: Preserved (acoustic features are language-agnostic)")
+    logger.success(
+        f"Decoder embedding: {old_embed.weight.shape} → {new_embed.weight.shape}")
+    logger.success(
+        f"Joint output: {old_linear.weight.shape} → {new_linear.weight.shape}")
+    logger.success(
+        f"Encoder: Preserved (acoustic features are language-agnostic)")
     logger.success(f"Output model: {output_path}")
     logger.info("")
     logger.info("Next step: Fine-tune on Vietnamese data with:")
@@ -148,6 +171,7 @@ def replace_tokenizer_mode(base_model_path, vietnamese_tokenizer_path, output_pa
     logger.info(f"    --train_manifest data/train_mixed.json \\")
     logger.info(f"    --val_manifest data/val_mixed.json \\")
     logger.info(f"    --gpus 1 --max_steps 10000")
+
 
 def full_scratch_mode(config_path, vietnamese_tokenizer_path, output_path):
     """
@@ -169,8 +193,10 @@ def full_scratch_mode(config_path, vietnamese_tokenizer_path, output_path):
     logger.info("2. Use NeMo's native training scripts")
     logger.info("3. See: https://github.com/NVIDIA/NeMo/tree/main/examples/asr")
     logger.info("")
-    logger.info("Recommended: Use 'replace' mode instead, which leverages pretrained weights.")
+    logger.info(
+        "Recommended: Use 'replace' mode instead, which leverages pretrained weights.")
     sys.exit(1)
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -196,18 +222,18 @@ Examples:
     )
 
     parser.add_argument("--mode", type=str, required=True,
-                       choices=['replace', 'full_scratch'],
-                       help="Training mode: 'replace' (recommended) or 'full_scratch'")
+                        choices=['replace', 'full_scratch'],
+                        help="Training mode: 'replace' (recommended) or 'full_scratch'")
     parser.add_argument("--base_model", type=str,
-                       help="Path to base .nemo model (required for 'replace' mode)")
+                        help="Path to base .nemo model (required for 'replace' mode)")
     parser.add_argument("--config", type=str,
-                       help="Path to NeMo config YAML (required for 'full_scratch' mode)")
+                        help="Path to NeMo config YAML (required for 'full_scratch' mode)")
     parser.add_argument("--vietnamese_tokenizer", type=str, required=True,
-                       help="Path to Vietnamese tokenizer.model")
+                        help="Path to Vietnamese tokenizer.model")
     parser.add_argument("--vocab_size", type=int, default=2048,
-                       help="Vietnamese vocabulary size (default: 2048)")
+                        help="Vietnamese vocabulary size (default: 2048)")
     parser.add_argument("--output_model", type=str, required=True,
-                       help="Output path for model checkpoint")
+                        help="Output path for model checkpoint")
 
     args = parser.parse_args()
 
@@ -226,7 +252,8 @@ Examples:
             sys.exit(1)
 
     if not Path(args.vietnamese_tokenizer).exists():
-        logger.error(f"Vietnamese tokenizer not found: {args.vietnamese_tokenizer}")
+        logger.error(
+            f"Vietnamese tokenizer not found: {args.vietnamese_tokenizer}")
         sys.exit(1)
 
     # Execute based on mode
@@ -243,6 +270,7 @@ Examples:
             vietnamese_tokenizer_path=args.vietnamese_tokenizer,
             output_path=args.output_model
         )
+
 
 if __name__ == "__main__":
     main()

@@ -127,3 +127,112 @@ The output will be in NeMo's SegLST JSON format outlining exactly when each spea
   }
 ]
 ```
+
+---
+
+## 5. Architecture Details
+
+```mermaid
+graph TD
+    subgraph Input
+        A[Raw Audio Waveform]
+    end
+
+    subgraph Preprocessing
+        B[AudioToMelSpectrogramPreprocessor<br>Mel-Filterbank Features: 128]
+    end
+
+    subgraph Speaker Identification
+        S1[Diarization Model<br>Sortformer 4spk]
+        S2[Speaker Mask Inference]
+    end
+
+    subgraph Acoustic Model
+        C[Conformer Encoder<br>24 Layers, 1024 Hidden<br>Params: 609M]
+        F_ENC(("Acoustic Features (f_enc)"))
+    end
+
+    subgraph Language Predictor
+        E[Embedding Layer<br>1700 Tokens x 640 Dim]
+        D[RNNT Decoder LSTM<br>640 Hidden<br>Params: 7.2M]
+        F_DEC(("Linguistic Features (f_dec)"))
+    end
+
+    subgraph Multi-Talker Joint Network
+        S3[Speaker / BG Kernels<br>Params: 4.2M]
+        F[RNNT Joint<br>f_enc + f_dec + spk_mask]
+        G[Linear Projection<br>640 → 1700 Vocab Classes]
+        H(("Vocabulary Logits"))
+    end
+
+    subgraph Output
+        I[Softmax & Beam Search]
+        J[Token Emission]
+        K[/"Final Transcribed Text<br>Vietnamese & English"/]
+    end
+
+    A --> B
+    A -.-> S1
+    S1 --> S2
+    
+    B --> C
+    C --> F_ENC
+    
+    J -. "Previous Token (t-1)" .-> E
+    E --> D
+    D --> F_DEC
+
+    S2 -. "Speaker Mask" .-> S3
+    
+    F_ENC --> F
+    F_DEC --> F
+    S3 --> F
+    
+    F --> G
+    G --> H
+    H --> I
+    I --> J
+    J ===> K
+```
+
+### Original Model (English)
+- **Tokenizer:** 1024 BPE tokens (English)
+- **Embedding:** (1025, 640) - 1024 tokens + 1 blank
+- **Encoder:** ConformerEncoder (24 layers, 1024 hidden)
+- **Decoder:** RNNTDecoder (LSTM, 640 hidden)
+- **Joint:** Linear(640 → 1025)
+
+### Extended Model (Vietnamese + English)
+- **Tokenizer:** ~1700 BPE tokens (1024 English + ~675 Vietnamese)
+- **Embedding:** (1700, 640) - preserved English + completely guarded initial limits for Vietnamese tokens to eliminate RNN-T target looping
+- **Encoder:** Unchanged (language-agnostic, preserved entirely)
+- **Decoder:** Same architecture, larger embedding
+- **Joint:** Linear(640 → 1700)
+
+### Vietnamese-Only Model
+- **Tokenizer:** ~2048 BPE tokens (Vietnamese)
+- **Embedding:** (2049, 640) - random initialization
+- **Encoder:** Preserved from pretrained (acoustic features)
+- **Decoder:** Randomized embeddings
+- **Joint:** Linear(640 → 2049) - randomized
+
+### Architecture Logic & Mechanism Overview
+
+NVIDIA's `EncDecMultiTalkerRNNTBPEModel` fundamentally splits the multi-speaker ASR process into distinct, decoupled modular systems, enabling immense customization flexibility for developers:
+
+1. **Acoustic Processing (Encoder)**
+   - The raw `16kHz` audio is passed into an `AudioToMelSpectrogramPreprocessor`, yielding 128-dimensional filterbanks.
+   - The **Conformer Encoder** (609M params) processes the spectral features into high-level acoustic embeddings (`f_enc`). Since the encoder is purely acoustic, it operates entirely independently of vocabulary, meaning transferring this from English to Vietnamese perfectly retains its powerful structural acoustic representations.
+
+2. **Diarization & Speaker Masking**
+   - In parallel, the audio is analyzed by a standalone Diarization Model (e.g., `Sortformer 4spk` or a custom `ECAPA-TDNN` pipeline).
+   - This auxiliary model outputs a localized **Speaker Mask** (a binary 0/1 map detailing exactly when Speaker 1, 2, 3, etc. are active).
+   - These masks are mathematically projected through the internal ASR **Speaker Kernels** (`spk_kernels` & `bg_spk_kernels`), acting as trainable "glue" layers to cleanly fuse speaker identity directly into the downstream joint network.
+
+3. **Linguistic Processing (Decoder)**
+   - The **RNN-T Decoder** functions as an auto-regressive language model. It takes the transcription generated so far (e.g., Token `t-1`), embeds it via the `Embedding Layer`, and computes linguistic expectation vectors (`f_dec`).
+
+4. **Multi-Talker Joint Projection**
+   - The `RNNT Joint` is the heart of the network. It combines the `f_enc` (what does it sound like?), `f_dec` (what word logically comes next?), and the `spk_kernels` (who is speaking right now?). 
+   - A final `Linear Projection` maps this combined state space to explicit vocabulary class logits (the tokens).
+   - A **Greedy Beam Search** determines the maximum logit. Crucially, the model relies natively on a `blank` pseudo-token (mathematically bound to `0.0`) to "wait" and loop through timeframes without emitting random garbage characters when no new acoustic letters are pronounced!

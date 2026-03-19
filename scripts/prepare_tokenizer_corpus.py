@@ -11,18 +11,42 @@ def extract_text_from_manifest(manifest_path, output_path):
     texts = []
 
     with open(manifest_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            try:
-                data = json.loads(line.strip())
-                # Handle both NeMo manifest and Lhotse CutSet formats
+        try:
+            # Try loading as JSON array first (Lhotse CutSet format)
+            content = f.read()
+            data = json.loads(content)
+
+            # Handle JSON array
+            if isinstance(data, list):
+                for item in data:
+                    if 'supervisions' in item:
+                        for sup in item['supervisions']:
+                            if 'text' in sup:
+                                texts.append(sup['text'])
+                    elif 'text' in item:
+                        texts.append(item['text'])
+            # Handle single JSON object
+            elif isinstance(data, dict):
                 if 'text' in data:
                     texts.append(data['text'])
                 elif 'supervisions' in data:
                     for sup in data['supervisions']:
                         if 'text' in sup:
                             texts.append(sup['text'])
-            except json.JSONDecodeError:
-                continue
+        except json.JSONDecodeError:
+            # Fall back to JSONL format (one JSON per line)
+            f.seek(0)
+            for line in f:
+                try:
+                    data = json.loads(line.strip())
+                    if 'text' in data:
+                        texts.append(data['text'])
+                    elif 'supervisions' in data:
+                        for sup in data['supervisions']:
+                            if 'text' in sup:
+                                texts.append(sup['text'])
+                except json.JSONDecodeError:
+                    continue
 
     # Write corpus (one sentence per line)
     with open(output_path, 'w', encoding='utf-8') as f:

@@ -14,3 +14,5 @@ wheels/
 data/
 checkpoints/
 models/
+spm_bin/
+temp*

@@ -124,9 +124,12 @@ class MultitalkerASRModel:
             samples=samples)
 
         if output_path:
-            write_seglst_file(
-                seglst_dict_list=batch_seglst_list, output_path=output_path)
-            logger.success(f"Transcription saved to {output_path}")
+            try:
+                write_seglst_file(
+                    seglst_dict_list=batch_seglst_list, output_path=output_path)
+                logger.success(f"Transcription saved to {output_path}")
+            except ValueError as e:
+                logger.warning(f"Failed to write transcript: {e}")
 
         return batch_seglst_list
 
