@@ -2979,7 +2979,7 @@ requires-dist = [
     { name = "pytorch-lightning", specifier = "==1.9.5" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "ruamel-yaml", specifier = ">=0.19.1" },
-    { name = "setuptools", specifier = ">=82.0.1" },
+    { name = "setuptools", specifier = ">=65.0.0" },
     { name = "torch", specifier = ">=2.0.0" },
     { name = "unidecode", specifier = ">=1.4.0" },
     { name = "wget", specifier = ">=3.2" },

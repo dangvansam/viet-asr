@@ -16,3 +16,4 @@ checkpoints/
 models/
 spm_bin/
 temp*
+wandb

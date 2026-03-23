@@ -10,9 +10,9 @@ if __name__ == "__main__":
                         help="Directory to save mixed WAVs")
     parser.add_argument("--output_manifest", type=str,
                         required=True, help="Path for results manifest")
-    parser.add_argument("--num_samples", type=int, default=1000)
+    parser.add_argument("--num_samples", type=int, default=-1,
+                        help="-1 auto-scales to match input dataset size")
     parser.add_argument("--max_speakers", type=int, default=2)
 
     args = parser.parse_args()
-    synthesize_multitalker(args.input_manifests, args.output_dir,
-                           args.output_manifest, args.num_samples, args.max_speakers)
+    synthesize_multitalker(args.input_manifests, args.output_dir, args.output_manifest, args.num_samples, args.max_speakers)

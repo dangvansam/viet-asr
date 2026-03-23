@@ -11,6 +11,8 @@ class ModelConfig:
     device: str = "cpu"
     cuda_id: int = -1
     use_amp: bool = True
+    config_path: str = None
+    vocab_size: int = 2048
 
 
 @dataclass
@@ -50,13 +52,18 @@ class InferenceConfig:
 class TrainingConfig:
     train_manifest: str = "data/train.json"
     val_manifest: str = "data/val.json"
-    max_steps: int = 1000
+    max_steps: int = -1
+    max_epochs: int = 100
     learning_rate: float = 1e-5
     weight_decay: float = 1e-3
-    batch_size: int = 4
-    accumulate_grad_batches: int = 4
-    precision: int = 32  # 16 for GPU
-    val_check_interval: int = 100
+    batch_size: int = 8
+    accumulate_grad_batches: int = 2
+    precision: int = 32
+    val_check_interval: int = None
+    output_path: str = None
+    tokenizer_dir: str = None
+    wandb_project: str = None
+    wandb_run_name: str = None
 
 
 @dataclass
@@ -64,8 +71,8 @@ class DataConfig:
     input_csv: Optional[str] = None
     audio_dir: Optional[str] = None
     output_manifest: Optional[str] = None
-    num_samples: int = 1000
-    max_speakers: int = 2
+    num_samples: int = -1
+    max_speakers: int = 4
     sample_rate: int = 16000
 
 

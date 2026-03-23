@@ -1,5 +1,5 @@
 sample_rate: 16000
-compute_eval_loss: false
+compute_eval_loss: true
 log_prediction: true
 rnnt_reduction: mean_volume
 skip_nan_grad: true
@@ -7,11 +7,11 @@ freeze_diar: true
 spk_supervision_strategy: rttm
 rttm_mix_prob: 0.5
 shuffle_spk_mapping: true
-binarize_diar_preds_threshold: null
+binarize_diar_preds_threshold: 0.5
 model_defaults:
-  enc_hidden: 1024
-  pred_hidden: 640
-  joint_hidden: 640
+  enc_hidden: 512
+  pred_hidden: 512
+  joint_hidden: 512
   num_speakers: 4
   spk_tar_all_zero: false
   num_sample_per_mel_frame: 160
@@ -106,8 +106,8 @@ encoder:
   _target_: nemo.collections.asr.modules.ConformerEncoder
   feat_in: 128
   feat_out: -1
-  n_layers: 24
-  d_model: 1024
+  n_layers: 16
+  d_model: 512
   use_bias: false
   subsampling: dw_striding
   subsampling_factor: 8
@@ -148,7 +148,7 @@ decoder:
   random_state_sampling: false
   blank_as_pad: true
   prednet:
-    pred_hidden: 640
+    pred_hidden: 512
     pred_rnn_layers: 2
     t_max: null
     dropout: 0.2
@@ -160,11 +160,11 @@ joint:
   fuse_loss_wer: true
   fused_batch_size: 16
   jointnet:
-    joint_hidden: 640
+    joint_hidden: 512
     activation: relu
     dropout: 0.2
-    encoder_hidden: 1024
-    pred_hidden: 640
+    encoder_hidden: 512
+    pred_hidden: 512
   num_classes: 1700
   vocabulary:
   - <unk>
@@ -1194,7 +1194,7 @@ joint:
 decoding:
   strategy: greedy_batch
   greedy:
-    max_symbols: 10
+    max_symbols: 30
   beam:
     beam_size: 2
     return_best_hypothesis: false
@@ -1208,17 +1208,17 @@ loss:
     clamp: -1.0
 optim:
   name: adamw
-  lr: 2
+  lr: 0.5
   betas:
   - 0.9
   - 0.98
   weight_decay: 0.001
   sched:
     name: NoamAnnealing
-    warmup_steps: 4000
+    warmup_steps: 10000
     warmup_ratio: null
     min_lr: 1.0e-06
-    d_model: 1024
+    d_model: 512
 spk_kernel_type: ff
 spk_kernel_layers:
 - 0

@@ -20,7 +20,7 @@ dependencies = [
     "pytorch-lightning==1.9.5",
     "requests>=2.32.5",
     "ruamel-yaml>=0.19.1",
-    "setuptools>=82.0.1",
+    "setuptools>=65.0.0",
     "torch>=2.0.0",
     "unidecode>=1.4.0",
     "wget>=3.2",
