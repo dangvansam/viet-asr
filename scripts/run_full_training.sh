@@ -15,11 +15,11 @@ VOCAB_SIZE=2048  # Vietnamese vocabulary size
 
 # Training parameters
 MAX_STEPS=500000  # Increased for better convergence when training from scratch
-BATCH_SIZE=32
+BATCH_SIZE=64
 LEARNING_RATE=0.5  # Lower LR for training from scratch (Noam scheduler will scale this)
 NUM_SYNTH_SAMPLES=1000000  # Number of multi-speaker samples to synthesize
-MAX_SPEAKERS=2  # Start with 2 speakers for better scratch convergence
-GRAD_ACCUM=8  # Gradient accumulation for effective batch size of 256
+MAX_SPEAKERS=4  # Start with 2 speakers for better scratch convergence
+GRAD_ACCUM=4  # Gradient accumulation for effective batch size of 256
 
 echo "=============================================="
 echo "Vietnamese Multitalker ASR Training Pipeline"
@@ -66,27 +66,9 @@ else
 fi
 
 
-# Step 5: Synthesize multi-speaker training data
+# Step 5: (Skip) Synthesize multi-speaker training data - Now handled on-the-fly!
 echo ""
-echo "[Step 5/7] Synthesizing multi-speaker overlapping audio..."
-if [ ! -f "$OUTPUT_DIR/train_mixed.json" ]; then
-    uv run scripts/synthesize_data.py \
-        --input_manifests "$OUTPUT_DIR/train_single_speaker.json" \
-        --output_dir "$OUTPUT_DIR/synthesized_audio" \
-        --output_manifest "$OUTPUT_DIR/train_mixed.json" \
-        --num_samples "$NUM_SYNTH_SAMPLES" \
-        --max_speakers "$MAX_SPEAKERS"
-
-    # Create validation mixed data
-    uv run scripts/synthesize_data.py \
-        --input_manifests "$OUTPUT_DIR/val_single_speaker.json" \
-        --output_dir "$OUTPUT_DIR/synthesized_audio_val" \
-        --output_manifest "$OUTPUT_DIR/val_mixed.json" \
-        --num_samples 5000 \
-        --max_speakers "$MAX_SPEAKERS"
-else
-    echo "Mixed data already exists. Skipping..."
-fi
+echo "[Step 5/7] Skipping offline synthesis (Streaming mode enabled)..."
 
 # Step 6: Fine-tune the model
 
@@ -94,21 +76,24 @@ OUTPUT_MODEL="$CHECKPOINT_DIR/multitalker-vietnamese-scratch.nemo"
 CONFIG_MODEL="model_config.yaml"
 
 echo ""
-echo "[Step 6/7] Starting training..."
+echo "[Step 6/7] Starting training (Streaming Mode)..."
 uv run scripts/finetune.py \
     --model_path "$OUTPUT_MODEL" \
     --config_path "$CONFIG_MODEL" \
     --tokenizer_dir "$OUTPUT_DIR/vi_tokenizer.model" \
     --vocab_size "$VOCAB_SIZE" \
     --output_path "$OUTPUT_MODEL" \
-    --train_manifest "$OUTPUT_DIR/train_mixed.json" \
-    --val_manifest "$OUTPUT_DIR/val_mixed.json" \
+    --train_manifest "$OUTPUT_DIR/train_single_speaker.json" \
+    --val_manifest "$OUTPUT_DIR/val_single_speaker.json" \
     --max_steps "$MAX_STEPS" \
     --batch_size "$BATCH_SIZE" \
     --learning_rate "$LEARNING_RATE" \
     --accumulate_grad_batches "$GRAD_ACCUM" \
     --gpus 1 \
-    --wandb_project "multitalker-asr-v2"
+    --wandb_project "multitalker-asr-v2" \
+    --use_on_the_fly_synthesis \
+    --max_speakers "$MAX_SPEAKERS" \
+    --synthesis_num_workers 8
 
 # Step 7: Evaluate the model
 echo ""

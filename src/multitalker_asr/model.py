@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 import lightning.pytorch as pl
 import torch
@@ -15,65 +16,51 @@ from .config import InferenceConfig, ModelConfig, TrainingConfig
 
 
 class MultitalkerASRModel:
-    def __init__(self, model_cfg: ModelConfig = None):
+    def __init__(self, model_cfg: Optional[ModelConfig] = None):
         self.model_cfg = model_cfg or ModelConfig()
-        self.device = torch.device("cpu") if self.model_cfg.cuda_id < 0 or not torch.cuda.is_available(
-        ) else torch.device(f"cuda:{self.model_cfg.cuda_id}")
+        self.device = torch.device("cpu") if self.model_cfg.cuda_id < 0 or not torch.cuda.is_available() else torch.device(f"cuda:{self.model_cfg.cuda_id}")
         self.map_location = self.device
 
         self.asr_model = None
         self.diar_model = None
 
-    def load_models(self, tokenizer_dir: str = None):
+    def load_models(self, tokenizer_dir: Optional[str] = None):
         """Loads both ASR and Diarization models."""
-        logger.info(
-            f"Loading Diarization Model from {self.model_cfg.diar_model_path}...")
+        logger.info(f"Loading Diarization Model from {self.model_cfg.diar_model_path}...")
         if os.path.exists(self.model_cfg.diar_model_path):
-            self.diar_model = SortformerEncLabelModel.restore_from(
-                restore_path=self.model_cfg.diar_model_path, map_location=self.map_location)
+            self.diar_model = SortformerEncLabelModel.restore_from(restore_path=self.model_cfg.diar_model_path, map_location=self.map_location)
         else:
-            logger.warning(
-                f"Diarization model file not found at {self.model_cfg.diar_model_path}, trying pretrained name...")
-            self.diar_model = SortformerEncLabelModel.from_pretrained(
-                self.model_cfg.diar_pretrained_name, map_location=self.map_location)
+            logger.warning(f"Diarization model file not found at {self.model_cfg.diar_model_path}, trying pretrained name...")
+            self.diar_model = SortformerEncLabelModel.from_pretrained(self.model_cfg.diar_pretrained_name, map_location=self.map_location)
 
-        logger.info(
-            f"Loading ASR Model from {self.model_cfg.asr_model_path}...")
+        logger.info(f"Loading ASR Model from {self.model_cfg.asr_model_path}...")
         if os.path.exists(self.model_cfg.asr_model_path):
             if self.model_cfg.asr_model_path.endswith(".ckpt"):
-                logger.info(
-                    "Detected .ckpt file, loading config and weights manually...")
-                checkpoint = torch.load(
-                    self.model_cfg.asr_model_path, map_location=self.map_location, weights_only=False)
-                if 'hyper_parameters' in checkpoint and 'cfg' in checkpoint['hyper_parameters']:
-                    cfg = checkpoint['hyper_parameters']['cfg']
+                logger.info("Detected .ckpt file, loading config and weights manually...")
+                checkpoint = torch.load(self.model_cfg.asr_model_path, map_location=self.map_location, weights_only=False)
+                if "hyper_parameters" in checkpoint and "cfg" in checkpoint["hyper_parameters"]:
+                    cfg = checkpoint["hyper_parameters"]["cfg"]
                     # Patch tokenizer paths if they use nemo: prefix which fails outside of .nemo package
-                    if 'tokenizer' in cfg:
+                    if "tokenizer" in cfg:
                         with open_dict(cfg):
-                            for key in ['model_path', 'vocab_path', 'spe_tokenizer_vocab']:
+                            for key in ["model_path", "vocab_path", "spe_tokenizer_vocab"]:
                                 if key in cfg.tokenizer and isinstance(cfg.tokenizer[key], str) and cfg.tokenizer[key].startswith("nemo:"):
                                     # Extract the actual filename
-                                    filename = cfg.tokenizer[key].split(
-                                        "_", 1)[-1] if "_" in cfg.tokenizer[key] else cfg.tokenizer[key][5:]
-                                    local_path = os.path.join(
-                                        cfg.tokenizer.get('dir', ''), filename)
+                                    filename = cfg.tokenizer[key].split("_", 1)[-1] if "_" in cfg.tokenizer[key] else cfg.tokenizer[key][5:]
+                                    local_path = os.path.join(cfg.tokenizer.get("dir", ""), filename)
                                     if os.path.exists(local_path):
-                                        logger.info(
-                                            f"Patching {key}: {cfg.tokenizer[key]} -> {local_path}")
+                                        logger.info(f"Patching {key}: {cfg.tokenizer[key]} -> {local_path}")
                                         cfg.tokenizer[key] = local_path
 
                     self.asr_model = EncDecMultiTalkerRNNTBPEModel(cfg=cfg)
-                    self.asr_model.load_state_dict(checkpoint['state_dict'])
+                    self.asr_model.load_state_dict(checkpoint["state_dict"])
                     self.asr_model.to(self.map_location)
                 else:
-                    raise ValueError(
-                        "Could not find model config in checkpoint.")
+                    raise ValueError("Could not find model config in checkpoint.")
             else:
-                self.asr_model = ASRModel.restore_from(
-                    restore_path=self.model_cfg.asr_model_path, map_location=self.map_location)
+                self.asr_model = ASRModel.restore_from(restore_path=self.model_cfg.asr_model_path, map_location=self.map_location)
         elif hasattr(self.model_cfg, "config_path") and self.model_cfg.config_path and os.path.exists(self.model_cfg.config_path):
-            logger.info(
-                f"ASR model file {self.model_cfg.asr_model_path} not found. Creating from scratch using config {self.model_cfg.config_path}...")
+            logger.info(f"ASR model file {self.model_cfg.asr_model_path} not found. Creating from scratch using config {self.model_cfg.config_path}...")
 
             from nemo.collections.common.tokenizers import SentencePieceTokenizer
 
@@ -85,80 +72,72 @@ class MultitalkerASRModel:
                 if os.path.isfile(tokenizer_dir):
                     tokenizer_path = tokenizer_dir
                 else:
-                    tokenizer_path = os.path.join(
-                        tokenizer_dir, "tokenizer.model")
+                    tokenizer_path = os.path.join(tokenizer_dir, "tokenizer.model")
 
                 tokenizer = SentencePieceTokenizer(model_path=tokenizer_path)
                 if tokenizer.vocab_size != vocab_size:
-                    logger.warning(
-                        f"Tokenizer vocab size mismatch: {tokenizer.vocab_size} != {vocab_size}")
+                    logger.warning(f"Tokenizer vocab size mismatch: {tokenizer.vocab_size} != {vocab_size}")
                     vocab_size = tokenizer.vocab_size
                     new_vocab_size = vocab_size + 1
 
                 with open_dict(cfg):
-                    if 'tokenizer' not in cfg:
+                    if "tokenizer" not in cfg:
                         cfg.tokenizer = {}
 
-                    cfg.tokenizer.dir = os.path.dirname(
-                        os.path.abspath(tokenizer_path))
+                    cfg.tokenizer.dir = os.path.dirname(os.path.abspath(tokenizer_path))
                     cfg.tokenizer.type = "bpe"
                     cfg.tokenizer.model_path = os.path.abspath(tokenizer_path)
                     cfg.tokenizer.vocab_size = vocab_size
 
-                    vocab_file = os.path.abspath(
-                        tokenizer_path).replace(".model", ".vocab")
+                    vocab_file = os.path.abspath(tokenizer_path).replace(".model", ".vocab")
                     if os.path.exists(vocab_file):
                         cfg.tokenizer.vocab_path = vocab_file
                         cfg.tokenizer.spe_tokenizer_vocab = vocab_file
 
-                    if 'decoder' in cfg:
+                    if "decoder" in cfg:
                         cfg.decoder.vocab_size = new_vocab_size
-                        if 'vocabulary' in cfg.decoder:
-                            cfg.decoder.pop('vocabulary')
-                    if 'joint' in cfg:
+                        if "vocabulary" in cfg.decoder:
+                            cfg.decoder.pop("vocabulary")
+                    if "joint" in cfg:
                         cfg.joint.num_classes = new_vocab_size
-                        if 'vocabulary' in cfg.joint:
-                            cfg.joint.pop('vocabulary')
-                    if 'model_defaults' in cfg:
-                        if 'vocab_size' in cfg.model_defaults:
+                        if "vocabulary" in cfg.joint:
+                            cfg.joint.pop("vocabulary")
+                    if "model_defaults" in cfg:
+                        if "vocab_size" in cfg.model_defaults:
                             cfg.model_defaults.vocab_size = vocab_size
-                        if 'num_classes' in cfg.model_defaults:
+                        if "num_classes" in cfg.model_defaults:
                             cfg.model_defaults.num_classes = new_vocab_size
 
             # Remove datasets so initialization doesn't choke on missing files
             ds_configs = {}
             with open_dict(cfg):
-                for ds in ['train_ds', 'validation_ds', 'test_ds']:
+                for ds in ["train_ds", "validation_ds", "test_ds"]:
                     if ds in cfg:
                         ds_configs[ds] = cfg.pop(ds)
 
-            self.asr_model = EncDecMultiTalkerRNNTBPEModel(
-                cfg=cfg, trainer=None)
+            self.asr_model = EncDecMultiTalkerRNNTBPEModel(cfg=cfg, trainer=None)
 
             # Sync config and restore datasets
             with open_dict(self.asr_model.cfg):
                 if tokenizer_dir and os.path.exists(tokenizer_dir):
-                    if 'decoder' in self.asr_model.cfg:
+                    if "decoder" in self.asr_model.cfg:
                         self.asr_model.cfg.decoder.vocab_size = new_vocab_size
-                    if 'joint' in self.asr_model.cfg:
+                    if "joint" in self.asr_model.cfg:
                         self.asr_model.cfg.joint.num_classes = new_vocab_size
-                    if 'model_defaults' in self.asr_model.cfg:
+                    if "model_defaults" in self.asr_model.cfg:
                         self.asr_model.cfg.model_defaults.num_classes = new_vocab_size
                 for ds, ds_cfg in ds_configs.items():
                     self.asr_model.cfg[ds] = ds_cfg
 
             if tokenizer_dir and os.path.exists(tokenizer_dir):
                 try:
-                    self.asr_model.register_artifact(
-                        "tokenizer.model_path", cfg.tokenizer.model_path)
+                    self.asr_model.register_artifact("tokenizer.model_path", cfg.tokenizer.model_path)
                 except Exception as e:
                     logger.warning(f"Could not register artifact: {e}")
             logger.success("Scratch model created successfully in memory!")
         else:
-            logger.warning(
-                f"ASR model file not found at {self.model_cfg.asr_model_path}, trying cloud...")
-            self.asr_model = ASRModel.from_pretrained(
-                "nvidia/multitalker-parakeet-streaming-0.6b-v1", map_location=self.map_location)
+            logger.warning(f"ASR model file not found at {self.model_cfg.asr_model_path}, trying cloud...")
+            self.asr_model = ASRModel.from_pretrained("nvidia/multitalker-parakeet-streaming-0.6b-v1", map_location=self.map_location)
 
         self.asr_model.to(self.device).eval()
         self.diar_model.to(self.device).eval()
@@ -184,10 +163,9 @@ class MultitalkerASRModel:
 
         # ASR streaming setup
         if cfg.att_context_size and hasattr(self.asr_model.encoder, "set_default_att_context_size"):
-            self.asr_model.encoder.set_default_att_context_size(
-                att_context_size=cfg.att_context_size)
+            self.asr_model.encoder.set_default_att_context_size(att_context_size=cfg.att_context_size)
 
-    def transcribe(self, audio_path: str, output_path: str = "output.json", cfg: InferenceConfig = None):
+    def transcribe(self, audio_path: str, output_path: str = "output.json", cfg: Optional[InferenceConfig] = None):
         """Performs multi-talker transcription on a single audio file."""
         if cfg is None:
             cfg = InferenceConfig()
@@ -200,15 +178,12 @@ class MultitalkerASRModel:
             online_normalization=False,  # default for now
             pad_and_drop_preencoded=False,
         )
-        streaming_buffer.append_audio_file(
-            audio_filepath=audio_path, stream_id=-1)
+        streaming_buffer.append_audio_file(audio_filepath=audio_path, stream_id=-1)
 
         # Convert dataclass to a flexible OmegaConf object for NeMo compatibility
         # Using to_container ensures it's a plain dict-based config that allows missing keys
-        nemo_cfg = OmegaConf.create(OmegaConf.to_container(
-            OmegaConf.structured(cfg), resolve=True))
-        multispk_asr_streamer = SpeakerTaggedASR(
-            nemo_cfg, self.asr_model, self.diar_model)
+        nemo_cfg = OmegaConf.create(OmegaConf.to_container(OmegaConf.structured(cfg), resolve=True))
+        multispk_asr_streamer = SpeakerTaggedASR(nemo_cfg, self.asr_model, self.diar_model)
 
         # Using parallelism as it's the recommended strategy for Multitalker
         autocast = torch.amp.autocast(self.asr_model.device.type, enabled=True)
@@ -225,13 +200,11 @@ class MultitalkerASRModel:
                         drop_extra_pre_encoded=drop_extra_pre_encoded,
                     )
 
-        batch_seglst_list = multispk_asr_streamer.generate_seglst_dicts_from_parallel_streaming(
-            samples=samples)
+        batch_seglst_list = multispk_asr_streamer.generate_seglst_dicts_from_parallel_streaming(samples=samples)
 
         if output_path:
             try:
-                write_seglst_file(
-                    seglst_dict_list=batch_seglst_list, output_path=output_path)
+                write_seglst_file(seglst_dict_list=batch_seglst_list, output_path=output_path)
                 logger.success(f"Transcription saved to {output_path}")
             except ValueError as e:
                 logger.warning(f"Failed to write transcript: {e}")
@@ -240,34 +213,51 @@ class MultitalkerASRModel:
 
     def finetune(self, train_cfg: TrainingConfig):
         """Fine-tunes the ASR model."""
-        if self.asr_model == None:
-            self.load_models(tokenizer_dir=train_cfg.tokenizer_dir if hasattr(
-                train_cfg, "tokenizer_dir") else None)
+        if self.asr_model is None:
+            self.load_models(tokenizer_dir=train_cfg.tokenizer_dir if hasattr(train_cfg, "tokenizer_dir") else None)
 
-        is_from_scratch = hasattr(self.model_cfg, "config_path") and self.model_cfg.config_path and not os.path.exists(
-            self.model_cfg.asr_model_path)
-        if hasattr(train_cfg, "tokenizer_dir") and train_cfg.tokenizer_dir is not None and not is_from_scratch:
-            logger.info(
-                f"Changing vocabulary to new tokenizer at {train_cfg.tokenizer_dir}...")
-            self.asr_model.change_vocabulary(
-                new_tokenizer_dir=train_cfg.tokenizer_dir, new_tokenizer_type="bpe")
+        is_from_scratch = hasattr(self.model_cfg, "config_path") and self.model_cfg.config_path and not os.path.exists(self.model_cfg.asr_model_path)
+        is_resuming = self.model_cfg.asr_model_path.endswith(".ckpt") if self.model_cfg.asr_model_path else False
+
+        # Only change vocabulary if we are finetuning a base .nemo model (like NVIDIA's), not when resuming a .ckpt
+        if hasattr(train_cfg, "tokenizer_dir") and train_cfg.tokenizer_dir is not None and not is_from_scratch and not is_resuming:
+            # NeMo change_vocabulary expects a directory, not a file
+            new_tok_dir = train_cfg.tokenizer_dir
+            if os.path.isfile(new_tok_dir):
+                new_tok_dir = os.path.dirname(os.path.abspath(new_tok_dir))
+
+            logger.info(f"Changing vocabulary to new tokenizer at {new_tok_dir}...")
+            self.asr_model.change_vocabulary(new_tokenizer_dir=new_tok_dir, new_tokenizer_type="bpe")
 
         cfg = self.asr_model.cfg
         with open_dict(cfg):
-            cfg.train_ds.cuts_path = train_cfg.train_manifest
-            cfg.train_ds.manifest_filepath = None
             cfg.train_ds.batch_size = train_cfg.batch_size
             cfg.train_ds.text_field = "text"
-            cfg.train_ds.use_lhotse = True
+            
+            # Use Lhotse only for matching extensions, otherwise use native NeMo JSONL dataloader
+            if train_cfg.train_manifest.endswith(".jsonl") or train_cfg.train_manifest.endswith(".jsonl.gz"):
+                cfg.train_ds.use_lhotse = True
+                cfg.train_ds.cuts_path = train_cfg.train_manifest
+                cfg.train_ds.manifest_filepath = None
+            else:
+                cfg.train_ds.use_lhotse = False
+                cfg.train_ds.cuts_path = None
+                cfg.train_ds.manifest_filepath = train_cfg.train_manifest
 
             if not hasattr(cfg, "validate_ds") or cfg.validate_ds is None:
                 cfg.validate_ds = cfg.train_ds.copy()
 
-            cfg.validate_ds.cuts_path = train_cfg.val_manifest
-            cfg.validate_ds.manifest_filepath = None
-            cfg.validate_ds.text_field = "text"
             cfg.validate_ds.batch_size = train_cfg.batch_size
-            cfg.validate_ds.use_lhotse = True
+            cfg.validate_ds.text_field = "text"
+            
+            if train_cfg.val_manifest.endswith(".jsonl") or train_cfg.val_manifest.endswith(".jsonl.gz"):
+                cfg.validate_ds.use_lhotse = True
+                cfg.validate_ds.cuts_path = train_cfg.val_manifest
+                cfg.validate_ds.manifest_filepath = None
+            else:
+                cfg.validate_ds.use_lhotse = False
+                cfg.validate_ds.cuts_path = None
+                cfg.validate_ds.manifest_filepath = train_cfg.val_manifest
 
             # Optimization - only override if provided, otherwise preserve config (e.g. for Noam)
             if train_cfg.learning_rate and train_cfg.learning_rate != 1e-5:
@@ -276,10 +266,34 @@ class MultitalkerASRModel:
             if train_cfg.weight_decay and train_cfg.weight_decay != 1e-3:
                 cfg.optim.weight_decay = train_cfg.weight_decay
 
-        self.asr_model.setup_training_data(train_data_config=cfg.train_ds)
-        self.asr_model.setup_multiple_validation_data(
-            val_data_config=cfg.validate_ds)
-        self.asr_model.setup_optimization(optim_config=cfg.optim)
+        if train_cfg.use_on_the_fly_synthesis:
+            logger.info("Setting up on-the-fly synthesis data loaders...")
+            from .data.streaming import get_multitalker_dataloader
+
+            # For simplicity, we assume train_manifest and val_manifest are lists of strings or single strings
+            train_manifests = [train_cfg.train_manifest] if isinstance(train_cfg.train_manifest, str) else train_cfg.train_manifest
+            val_manifests = [train_cfg.val_manifest] if isinstance(train_cfg.val_manifest, str) else train_cfg.val_manifest
+
+            train_loader = get_multitalker_dataloader(manifest_paths=train_manifests, tokenizer=self.asr_model.tokenizer, batch_size=train_cfg.batch_size, max_speakers=train_cfg.max_speakers, num_workers=train_cfg.synthesis_num_workers)
+            # Use a finite number of samples for validation to avoid infinite loop
+            val_loader = get_multitalker_dataloader(manifest_paths=val_manifests, tokenizer=self.asr_model.tokenizer, batch_size=train_cfg.batch_size, max_speakers=train_cfg.max_speakers, num_workers=train_cfg.synthesis_num_workers, max_samples=train_cfg.batch_size * 20)
+
+            # Attach custom dataloaders directly to NeMo model so Lightning's setup() skips standard config allocation
+            self.asr_model._train_dl = train_loader
+            if isinstance(val_loader, list):
+                self.asr_model._validation_dl = val_loader
+            else:
+                self.asr_model._validation_dl = [val_loader]
+
+            # NeMo models expect some setup even with custom loaders
+            # We skip standard setup but might need to set some flags
+            self.asr_model.setup_optimization(optim_config=cfg.optim)
+        else:
+            self.asr_model.setup_training_data(train_data_config=cfg.train_ds)
+            self.asr_model.setup_multiple_validation_data(val_data_config=cfg.validate_ds)
+            self.asr_model.setup_optimization(optim_config=cfg.optim)
+            train_loader = None
+            val_loader = None
 
         # Disable CUDA graphs for stability
         if hasattr(self.asr_model, "cfg"):
@@ -291,23 +305,21 @@ class MultitalkerASRModel:
         class PrintLossCallback(Callback):
             def on_train_epoch_end(self, trainer, pl_module):
                 metrics = trainer.callback_metrics
-                train_loss = metrics.get('train_loss', 0.0)
-                val_loss = metrics.get('val_loss', 0.0)
-                val_wer = metrics.get('val_wer', 1.0)
-                logger.success(
-                    f"Epoch {trainer.current_epoch} End | Train Loss: {float(train_loss):.4f} | Val Loss: {float(val_loss):.4f} | Val WER: {float(val_wer):.4f}")
+                train_loss = metrics.get("train_loss", 0.0)
+                val_loss = metrics.get("val_loss", 0.0)
+                val_wer = metrics.get("val_wer", 1.0)
+                logger.success(f"Epoch {trainer.current_epoch} End | Train Loss: {float(train_loss):.4f} | Val Loss: {float(val_loss):.4f} | Val WER: {float(val_wer):.4f}")
 
         logger_list = True
-        if hasattr(train_cfg, 'wandb_project') and train_cfg.wandb_project:
+        if hasattr(train_cfg, "wandb_project") and train_cfg.wandb_project:
             from lightning.pytorch.loggers import WandbLogger
-            wandb_logger = WandbLogger(
-                project=train_cfg.wandb_project, name=train_cfg.wandb_run_name)
+
+            wandb_logger = WandbLogger(project=train_cfg.wandb_project, name=train_cfg.wandb_run_name)
             logger_list = [wandb_logger]
 
         trainer = pl.Trainer(
             devices=1,
-            accelerator="gpu" if torch.cuda.is_available(
-            ) and self.model_cfg.cuda_id >= 0 else "cpu",
+            accelerator="gpu" if torch.cuda.is_available() and self.model_cfg.cuda_id >= 0 else "cpu",
             max_steps=train_cfg.max_steps,
             max_epochs=train_cfg.max_epochs,
             accumulate_grad_batches=train_cfg.accumulate_grad_batches,
@@ -321,8 +333,9 @@ class MultitalkerASRModel:
             inference_mode=False,
             callbacks=[PrintLossCallback()],
             logger=logger_list,
+            limit_val_batches=20, # Limit validation to 20 batches
             gradient_clip_val=1.0,  # Gradient clipping for training stability
-            gradient_clip_algorithm="norm"
+            gradient_clip_algorithm="norm",
         )
 
         self.asr_model.set_trainer(trainer)
@@ -333,13 +346,17 @@ class MultitalkerASRModel:
 
         # Ensure model is in training mode
         self.asr_model.train()
-        trainer.fit(self.asr_model)
+        ckpt_path = self.model_cfg.asr_model_path if self.model_cfg.asr_model_path.endswith(".ckpt") else None
+
+        if train_cfg.use_on_the_fly_synthesis:
+            trainer.fit(self.asr_model, train_dataloaders=train_loader, val_dataloaders=val_loader, ckpt_path=ckpt_path)
+        else:
+            trainer.fit(self.asr_model, ckpt_path=ckpt_path)
 
         if train_cfg.output_path:
             save_path = train_cfg.output_path
         else:
-            save_path = self.model_cfg.asr_model_path.replace(
-                ".nemo", "-finetuned.nemo")
+            save_path = self.model_cfg.asr_model_path.replace(".nemo", "-finetuned.nemo")
 
         self.asr_model.save_to(save_path)
         logger.success(f"Fine-tuned model saved to {save_path}")

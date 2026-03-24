@@ -3,10 +3,11 @@
 A complete pipeline for training, fine-tuning, and deploying a Vietnamese multi-speaker ASR system based on NVIDIA's `multitalker-parakeet-streaming-0.6b-v1` using the NeMo toolkit.
 
 ## Features
-- **Data Preparation**: Convert standard transcript CSVs to NeMo-compliant `json` manifests via `scripts/prepare_data.py`.
-- **Synthetic Multi-Speaker Overlap Data**: Mix single-speaker TTS voice datasets into realistic overlapping conversational datasets via `scripts/synthesize_data.py`.
-- **Modular Core**: Reusable `MultitalkerASRModel` class in `src/multitalker_asr/` for integration into APIs or other scripts.
-- **CLI Scripts**: Clean wrappers in the `scripts/` directory for all major operations.
+- **On-the-fly Synthesis**: Generate overlapping multi-speaker training data dynamically during the training loop. No need to pre-generate massive mixed audio files.
+- **Checkpoint Resumption**: Seamlessly resume training from PyTorch Lightning `.ckpt` files with preserved optimizer state and vocabulary.
+- **Data Preparation**: Efficiently convert single-speaker TTS datasets into NeMo-compliant `json` manifests.
+- **Modular Core**: Reusable `MultitalkerASRModel` class in `src/multitalker_asr/` for inference and fine-tuning.
+- **CLI Scripts**: Clean wrappers for training, inference, and data management.
 
 ---
 
@@ -18,112 +19,97 @@ A complete pipeline for training, fine-tuning, and deploying a Vietnamese multi-
 
 ### Install Dependencies
 1. Clone or navigate to the project root.
-2. Use `uv` to install the requirements from `pyproject.toml`, which includes PyTorch Lightning, Librosa, and the NeMo toolkit directly from GitHub.
+2. Use `uv` to install the requirements from `pyproject.toml`.
 
 ```bash
 uv sync
 ```
 
-### Download Base Models (Recommended)
-Hugging Face wrappers can sometimes hang when downloading the massive NeMo checkpoints directly in code. It's recommended to download them to a `models/` folder beforehand.
+### Download Base Models (Required)
+Download the required NeMo checkpoints to the `models/` directory:
 
 ```bash
 mkdir -p models
-# Download Parakeet 0.6B ASR Base Model (2.3GB)
+# Parakeet 0.6B ASR Base Model
 wget -c https://huggingface.co/nvidia/multitalker-parakeet-streaming-0.6b-v1/resolve/main/multitalker-parakeet-streaming-0.6b-v1.nemo -P models/
 
-# Download Sortformer v2.1 Diarization Base Model (450MB)
+# Sortformer v2.1 Diarization Model
 wget -c https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1/resolve/main/diar_streaming_sortformer_4spk-v2.1.nemo -P models/
 ```
 
 ---
 
-## 2. Data Preparation Pipeline
+## 2. Data Preparation
 
-Multitalker ASR requires overlapping multi-speaker audio with `SegLST` JSON manifests to train effectively. We provide a two-step script process to generate this from your single-speaker TTS datasets.
+Our pipeline uses **on-the-fly synthesis**, meaning you only need to prepare your **single-speaker** datasets.
 
-### Step A: Format your single-speaker datasets
-First, format your source datasets into a standard CSV `dataset.csv`:
-```csv
-filename,speaker_id,start_time,duration,text
-audio_01.wav,nam-mien-bac,0.0,3.5,xin chào bạn
-...
-```
+### Step A: Prepare Source Data
+Format your single-speaker datasets into a standard CSV or use the helper script to scan a TTS directory:
 
-Run the preparation script to generate a single-speaker NeMo manifest:
 ```bash
-uv run scripts/prepare_data.py \
-    --csv dataset.csv \
-    --audio_dir /path/to/your/audio_files/ \
-    --output data/single_speaker.json
+uv run scripts/prepare_all_tts_data.py \
+    --data_root /path/to/tts_datasets \
+    --output_dir data \
+    --val_split 0.05
 ```
-
-### Step B: Synthesize Overlapping Multi-Speaker Data
-Mix the single-speaker audio into overlapping, multi-speaker conversational files:
-```bash
-uv run scripts/synthesize_data.py \
-    --input_manifests data/single_speaker.json \
-    --output_dir ./data/synthesized_train_audio/ \
-    --output_manifest data/train_mixed.json \
-    --num_samples 1000 \
-    --max_speakers 3
-```
-*Note: Run this again with different inputs or random seeds to generate `data/val_mixed.json` for validation.*
+This generates `data/train_single_speaker.json` and `data/val_single_speaker.json`.
 
 ---
 
-## 3. Fine-tuning the Model
+## 3. Training & Fine-tuning
 
-To adapt the base `Parakeet-0.6B` model to Vietnamese, run the fine-tuning script:
+### Option 1: Start Training from Scratch (or Base Model)
+Use the `run_full_training.sh` script to handle the entire pipeline (data split, tokenizer training, and finetuning):
+
+```bash
+./scripts/run_full_training.sh
+```
+
+### Option 2: Individual Training Command
+You can run the fine-tuning script directly with on-the-fly synthesis enabled:
 
 ```bash
 uv run scripts/finetune.py \
     --model_path models/multitalker-parakeet-streaming-0.6b-v1.nemo \
-    --train_manifest data/train_mixed.json \
-    --val_manifest data/val_mixed.json \
-    --gpus 1 \
-    --max_steps 10000
+    --train_manifest data/train_single_speaker.json \
+    --val_manifest data/val_single_speaker.json \
+    --use_on_the_fly_synthesis \
+    --max_speakers 4 \
+    --batch_size 64 \
+    --accumulate_grad_batches 4 \
+    --gpus 1
 ```
-*(Note: PyTorch Lightning logs and checkpoints will be saved to the `checkpoints/` directory.)*
 
-*(Note: If you run into `LightningModule` class validation errors during fine-tuning initialization, ensure your PyTorch Lightning version matches the exact compatibility requirements of the NeMo commit. Often `pytorch-lightning<2.0` is required).*
+### Option 3: Resuming from a Checkpoint
+If training was interrupted or you want to continue from a specific PyTorch Lightning `.ckpt` file:
 
-The script will save the newly tuned checkpoint to `models/multitalker-parakeet-streaming-0.6b-v1-finetuned.nemo`.
+```bash
+./scripts/resume_training.sh checkpoints/epoch=4-step=19590.ckpt
+```
+*The resume script automatically preserves the tokenizer and optimizer state.*
 
 ---
 
 ## 4. Inference
 
-Run out-of-core inference on an audio file:
+Run inference on an audio file (single or mixed speaker):
 
 ```bash
-# Example running on CPU for testing
 uv run scripts/infer.py \
-    --model_path "models/multitalker-parakeet-streaming-0.6b-v1.nemo" \
-    --audio "demo_audio.wav" \
-    --output "data/transcript.json" \
-    --cpu
+    --model_path "checkpoints/best_model.nemo" \
+    --audio "test.wav" \
+    --output "result.json"
 ```
 
-*Replace `cuda=-1` and `device="cpu"` with `cuda=0` and `device="cuda"` if you are running on a machine with a 24GB+ GPU.*
-
-### The Output format (`transcript.json`)
-The output will be in NeMo's SegLST JSON format outlining exactly when each speaker spoke:
+The output will be in NeMo's SegLST JSON format:
 ```json
 [
   {
-    "audio_filepath": "demo_audio.wav",
-    "offset": 1.5,
+    "audio_filepath": "test.wav",
+    "offset": 0.5,
     "duration": 2.1,
     "label": "speaker_0",
     "text": "xin chào các bạn"
-  },
-  {
-    "audio_filepath": "demo_audio.wav",
-    "offset": 2.8,
-    "duration": 1.9,
-    "label": "speaker_1",
-    "text": "chào buổi sáng"
   }
 ]
 ```
@@ -148,91 +134,39 @@ graph TD
     end
 
     subgraph Acoustic Model
-        C[Conformer Encoder<br>24 Layers, 1024 Hidden<br>Params: 609M]
+        C[Conformer Encoder<br>24 Layers, 1024 Hidden]
         F_ENC(("Acoustic Features (f_enc)"))
     end
 
     subgraph Language Predictor
-        E[Embedding Layer<br>1700 Tokens x 640 Dim]
-        D[RNNT Decoder LSTM<br>640 Hidden<br>Params: 7.2M]
+        E[Embedding Layer<br>RNNT Decoder LSTM]
         F_DEC(("Linguistic Features (f_dec)"))
     end
 
     subgraph Multi-Talker Joint Network
-        S3[Speaker / BG Kernels<br>Params: 4.2M]
+        S3[Speaker / BG Kernels]
         F[RNNT Joint<br>f_enc + f_dec + spk_mask]
-        G[Linear Projection<br>640 → 1700 Vocab Classes]
-        H(("Vocabulary Logits"))
-    end
-
-    subgraph Output
-        I[Softmax & Beam Search]
-        J[Token Emission]
-        K[/"Final Transcribed Text<br>Vietnamese & English"/]
+        G[Linear Projection<br>Vocab Classes]
     end
 
     A --> B
     A -.-> S1
     S1 --> S2
-    
     B --> C
     C --> F_ENC
-    
-    J -. "Previous Token (t-1)" .-> E
-    E --> D
-    D --> F_DEC
-
-    S2 -. "Speaker Mask" .-> S3
-    
+    E --> F_DEC
+    S2 -.-> S3
     F_ENC --> F
     F_DEC --> F
     S3 --> F
-    
-    F --> G
-    G --> H
-    H --> I
-    I --> J
-    J ===> K
+    F --> G --> Output
 ```
 
-### Original Model (English)
-- **Tokenizer:** 1024 BPE tokens (English)
-- **Embedding:** (1025, 640) - 1024 tokens + 1 blank
-- **Encoder:** ConformerEncoder (24 layers, 1024 hidden)
-- **Decoder:** RNNTDecoder (LSTM, 640 hidden)
-- **Joint:** Linear(640 → 1025)
+### Logic & Mechanism Overview
+The `EncDecMultiTalkerRNNTBPEModel` combines acoustic Conformer features with linguistic LSTM state and **Speaker Masks** from a diarization model. 
 
-### Extended Model (Vietnamese + English)
-- **Tokenizer:** ~1700 BPE tokens (1024 English + ~675 Vietnamese)
-- **Embedding:** (1700, 640) - preserved English + completely guarded initial limits for Vietnamese tokens to eliminate RNN-T target looping
-- **Encoder:** Unchanged (language-agnostic, preserved entirely)
-- **Decoder:** Same architecture, larger embedding
-- **Joint:** Linear(640 → 1700)
+1. **Encoder**: Processes specrogram into acoustic features.
+2. **Diarization**: Predicts which speakers are active at each timeframe.
+3. **Joint Network**: Combines acoustic, linguistic, and speaker information to emit the correct tokens for the active speaker.
 
-### Vietnamese-Only Model
-- **Tokenizer:** ~2048 BPE tokens (Vietnamese)
-- **Embedding:** (2049, 640) - random initialization
-- **Encoder:** Preserved from pretrained (acoustic features)
-- **Decoder:** Randomized embeddings
-- **Joint:** Linear(640 → 2049) - randomized
-
-### Architecture Logic & Mechanism Overview
-
-NVIDIA's `EncDecMultiTalkerRNNTBPEModel` fundamentally splits the multi-speaker ASR process into distinct, decoupled modular systems, enabling immense customization flexibility for developers:
-
-1. **Acoustic Processing (Encoder)**
-   - The raw `16kHz` audio is passed into an `AudioToMelSpectrogramPreprocessor`, yielding 128-dimensional filterbanks.
-   - The **Conformer Encoder** (609M params) processes the spectral features into high-level acoustic embeddings (`f_enc`). Since the encoder is purely acoustic, it operates entirely independently of vocabulary, meaning transferring this from English to Vietnamese perfectly retains its powerful structural acoustic representations.
-
-2. **Diarization & Speaker Masking**
-   - In parallel, the audio is analyzed by a standalone Diarization Model (e.g., `Sortformer 4spk` or a custom `ECAPA-TDNN` pipeline).
-   - This auxiliary model outputs a localized **Speaker Mask** (a binary 0/1 map detailing exactly when Speaker 1, 2, 3, etc. are active).
-   - These masks are mathematically projected through the internal ASR **Speaker Kernels** (`spk_kernels` & `bg_spk_kernels`), acting as trainable "glue" layers to cleanly fuse speaker identity directly into the downstream joint network.
-
-3. **Linguistic Processing (Decoder)**
-   - The **RNN-T Decoder** functions as an auto-regressive language model. It takes the transcription generated so far (e.g., Token `t-1`), embeds it via the `Embedding Layer`, and computes linguistic expectation vectors (`f_dec`).
-
-4. **Multi-Talker Joint Projection**
-   - The `RNNT Joint` is the heart of the network. It combines the `f_enc` (what does it sound like?), `f_dec` (what word logically comes next?), and the `spk_kernels` (who is speaking right now?). 
-   - A final `Linear Projection` maps this combined state space to explicit vocabulary class logits (the tokens).
-   - A **Greedy Beam Search** determines the maximum logit. Crucially, the model relies natively on a `blank` pseudo-token (mathematically bound to `0.0`) to "wait" and loop through timeframes without emitting random garbage characters when no new acoustic letters are pronounced!
+Our implementation optimizes this by synthesizing these complex multi-speaker overlaps **on-the-fly** during training, allowing for effectively infinite data variety.

@@ -31,6 +31,12 @@ if __name__ == "__main__":
                         help="Path to NeMo config YAML (used if creating model from scratch)")
     parser.add_argument("--vocab_size", type=int, default=2048,
                         help="Vocabulary size for from-scratch model creation")
+    parser.add_argument("--use_on_the_fly_synthesis", action="store_true",
+                        help="Use on-the-fly data synthesis (synthesis mode)")
+    parser.add_argument("--max_speakers", type=int, default=2,
+                        help="Max speakers for on-the-fly synthesis")
+    parser.add_argument("--synthesis_num_workers", type=int, default=4,
+                        help="Number of workers for data synthesis")
 
     args = parser.parse_args()
 
@@ -52,7 +58,10 @@ if __name__ == "__main__":
         tokenizer_dir=args.tokenizer_dir,
         accumulate_grad_batches=args.accumulate_grad_batches,
         wandb_project=args.wandb_project if args.wandb_project else None,
-        wandb_run_name=args.wandb_run_name
+        wandb_run_name=args.wandb_run_name,
+        use_on_the_fly_synthesis=args.use_on_the_fly_synthesis,
+        max_speakers=args.max_speakers,
+        synthesis_num_workers=args.synthesis_num_workers
     )
 
     model = MultitalkerASRModel(model_cfg)

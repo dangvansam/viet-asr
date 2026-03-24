@@ -11,7 +11,7 @@ class ModelConfig:
     device: str = "cpu"
     cuda_id: int = -1
     use_amp: bool = True
-    config_path: str = None
+    config_path: Optional[str] = None
     vocab_size: int = 2048
 
 
@@ -59,11 +59,15 @@ class TrainingConfig:
     batch_size: int = 8
     accumulate_grad_batches: int = 2
     precision: int = 32
-    val_check_interval: int = None
-    output_path: str = None
-    tokenizer_dir: str = None
-    wandb_project: str = None
-    wandb_run_name: str = None
+    val_check_interval: Optional[int] = None
+    output_path: Optional[str] = None
+    tokenizer_dir: Optional[str] = None
+    wandb_project: Optional[str] = None
+    wandb_run_name: Optional[str] = None
+    # Synthesis parameters
+    use_on_the_fly_synthesis: bool = False
+    max_speakers: int = 2
+    synthesis_num_workers: int = 4
 
 
 @dataclass
@@ -74,6 +78,7 @@ class DataConfig:
     num_samples: int = -1
     max_speakers: int = 4
     sample_rate: int = 16000
+    use_on_the_fly_synthesis: bool = False
 
 
 def get_config(config_type="inference", **kwargs):
