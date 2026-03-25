@@ -25,10 +25,10 @@ VOCAB_SIZE=2048
 
 # Training parameters
 MAX_STEPS=500000
-BATCH_SIZE=64
+BATCH_SIZE=32
 LEARNING_RATE=0.5
-MAX_SPEAKERS=4
-GRAD_ACCUM=4
+MAX_SPEAKERS=2
+GRAD_ACCUM=8
 
 uv run scripts/finetune.py \
     --model_path "$CHECKPOINT_PATH" \
@@ -46,4 +46,4 @@ uv run scripts/finetune.py \
     --wandb_project "multitalker-asr-v2" \
     --use_on_the_fly_synthesis \
     --max_speakers "$MAX_SPEAKERS" \
-    --synthesis_num_workers 8
+    --synthesis_num_workers 16

@@ -81,6 +81,39 @@ class DataConfig:
     use_on_the_fly_synthesis: bool = False
 
 
+@dataclass
+class EvalConfig:
+    # Model
+    diar_model_path: str = "models/diar_streaming_sortformer_4spk-v2.1.nemo"
+    device: str = "cuda"
+    cuda_id: int = 0
+
+    # Data synthesis
+    source_manifest: Optional[str] = None
+    eval_data_dir: str = "data/eval_diarization"
+    num_samples: int = 200
+    max_speakers: int = 4
+    min_speakers: int = 2
+
+    # Pre-existing eval data (skip synthesis)
+    audio_dir: Optional[str] = None
+    rttm_dir: Optional[str] = None
+
+    # Inference
+    streaming: bool = True
+    batch_size: int = 1
+
+    # Evaluation
+    collar: float = 0.25
+    ignore_overlap: bool = False
+    eval_mode: str = "all"  # "full", "fair", "forgiving", "all"
+
+    # Output
+    output_dir: str = "data/eval_results"
+    generate_charts: bool = True
+    generate_audacity_labels: bool = True
+
+
 def get_config(config_type="inference", **kwargs):
     """Utility to get an OmegaConf object from dataclasses."""
     if config_type == "inference":
@@ -89,6 +122,8 @@ def get_config(config_type="inference", **kwargs):
         base_cfg = OmegaConf.structured(TrainingConfig())
     elif config_type == "data":
         base_cfg = OmegaConf.structured(DataConfig())
+    elif config_type == "eval":
+        base_cfg = OmegaConf.structured(EvalConfig())
     else:
         raise ValueError(f"Unknown config type: {config_type}")
 
