@@ -35,6 +35,7 @@ class TrainingConfig(BaseConfig):
     save_every_n_epochs: Optional[int] = None
     save_top_k: int = 3
     checkpoint_dir: str = "checkpoints"
+    log_file_name: str = "training.log"
 
     @property
     def is_finetune(self) -> bool:

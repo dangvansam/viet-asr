@@ -5,7 +5,7 @@ import lightning.pytorch as pl
 import lightning.pytorch.trainer.trainer as pl_trainer
 import torch
 from loguru import logger
-from omegaconf import open_dict
+from omegaconf import OmegaConf, open_dict
 
 from ..configs import ModelConfig, TrainingConfig
 from ..configs.training import TrainingMode
@@ -34,6 +34,23 @@ class MultitalkerTrainer(BaseTrainer):
         return self._train_cfg.mode
 
     def setup(self) -> None:
+        if not hasattr(self, "_run_name_configured"):
+            if self.mode != TrainingMode.RESUME:
+                run_name = self._train_cfg.wandb_run_name
+                if not run_name:
+                    from datetime import datetime
+                    run_name = datetime.now().strftime("%Y%m%d_%H%M%S")
+                
+                self._train_cfg.checkpoint_dir = os.path.join(
+                    self._train_cfg.checkpoint_dir, run_name
+                )
+                if self._train_cfg.wandb_run_name is None:
+                    self._train_cfg.wandb_run_name = run_name
+            self._run_name_configured = True
+
+        self._configure_logging()
+        self._save_config()
+
         if self._model.asr_model is None:
             tokenizer_dir = getattr(self._train_cfg, "tokenizer_dir", None)
             self._model.load_models(tokenizer_dir=tokenizer_dir)
@@ -200,6 +217,35 @@ class MultitalkerTrainer(BaseTrainer):
         if hasattr(self._model.asr_model, "cfg"):
             with open_dict(self._model.asr_model.cfg):
                 self._model.asr_model.cfg.enable_cuda_graphs = False
+                
+    def _configure_logging(self) -> None:
+        os.makedirs(self._train_cfg.checkpoint_dir, exist_ok=True)
+        log_file = os.path.join(
+            self._train_cfg.checkpoint_dir, self._train_cfg.log_file_name
+        )
+        logger.add(log_file, rotation="10 MB", level="INFO")
+        logger.info(f"Logging to {log_file}")
+
+    def _save_config(self) -> None:
+        os.makedirs(self._train_cfg.checkpoint_dir, exist_ok=True)
+        
+        # Save ModelConfig
+        model_cfg_path = os.path.join(self._train_cfg.checkpoint_dir, "model_config.yaml")
+        if self._model_cfg:
+            import dataclasses
+            with open(model_cfg_path, "w") as f:
+                OmegaConf.save(OmegaConf.create(dataclasses.asdict(self._model_cfg)), f)
+        
+        # Save TrainingConfig
+        train_cfg_path = os.path.join(self._train_cfg.checkpoint_dir, "train_config.yaml")
+        import dataclasses
+        with open(train_cfg_path, "w") as f:
+            OmegaConf.save(OmegaConf.create(dataclasses.asdict(self._train_cfg)), f)
+            
+        # Save NeMo Model Config (if available)
+        if hasattr(self._model.asr_model, "cfg"):
+            nemo_cfg_path = os.path.join(self._train_cfg.checkpoint_dir, "nemo_model_config.yaml")
+            OmegaConf.save(self._model.asr_model.cfg, nemo_cfg_path)
 
     def _create_trainer(self) -> None:
         callbacks = [PrintLossCallback()]
@@ -255,6 +301,7 @@ class MultitalkerTrainer(BaseTrainer):
                 WandbLogger(
                     project=self._train_cfg.wandb_project,
                     name=self._train_cfg.wandb_run_name,
+                    save_dir=self._train_cfg.checkpoint_dir,
                 )
             ]
         return True

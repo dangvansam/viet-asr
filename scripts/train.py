@@ -42,6 +42,7 @@ def parse_args():
     parser.add_argument("--save_every_n_epochs", type=int, default=None)
     parser.add_argument("--save_top_k", type=int, default=3)
     parser.add_argument("--checkpoint_dir", type=str, default="checkpoints")
+    parser.add_argument("--log_file_name", type=str, default="training.log")
 
     parser.add_argument("--output_path", type=str, default=None)
     parser.add_argument("--wandb_project", type=str, default="multitalker-asr")
@@ -80,6 +81,7 @@ if __name__ == "__main__":
         save_every_n_epochs=args.save_every_n_epochs,
         save_top_k=args.save_top_k,
         checkpoint_dir=args.checkpoint_dir,
+        log_file_name=args.log_file_name,
     )
 
     model = MultitalkerASRModel(model_cfg)
