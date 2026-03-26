@@ -182,7 +182,8 @@ def replace_tokenizer_mode(base_model_path, vietnamese_tokenizer_path, output_pa
     logger.success(f"Output model: {output_path}")
     logger.info("")
     logger.info("Next step: Fine-tune on Vietnamese data with:")
-    logger.info(f"  python scripts/finetune.py \\")
+    logger.info(f"  python scripts/train.py \\")
+    logger.info(f"    --mode finetune \\")
     logger.info(f"    --model_path {output_path} \\")
     logger.info(f"    --train_manifest data/train_mixed.json \\")
     logger.info(f"    --val_manifest data/val_mixed.json \\")
@@ -308,7 +309,7 @@ def full_scratch_mode(config_path, vietnamese_tokenizer_path, output_path, vocab
     logger.success("Scratch model created successfully!")
     logger.success(f"Vocabulary: {vocab_size} tokens")
     logger.success(f"Output model: {output_path}")
-    logger.info("Next step: Train on Vietnamese data using finetune.py")
+    logger.info("Next step: Train on Vietnamese data using train.py")
 
 
 def main():
@@ -326,7 +327,8 @@ Examples:
       --output_model checkpoints/multitalker-vietnamese-only.nemo
 
   # Then fine-tune on Vietnamese data
-  python scripts/finetune.py \\
+  python scripts/train.py \\
+      --mode finetune \\
       --model_path checkpoints/multitalker-vietnamese-only.nemo \\
       --train_manifest data/train_mixed.json \\
       --val_manifest data/val_mixed.json \\

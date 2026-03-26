@@ -66,10 +66,11 @@ Use the `run_full_training.sh` script to handle the entire pipeline (data split,
 ```
 
 ### Option 2: Individual Training Command
-You can run the fine-tuning script directly with on-the-fly synthesis enabled:
+You can run the training script directly with on-the-fly synthesis enabled:
 
 ```bash
-uv run scripts/finetune.py \
+uv run scripts/train.py \
+    --mode finetune \
     --model_path models/multitalker-parakeet-streaming-0.6b-v1.nemo \
     --train_manifest data/train_single_speaker.json \
     --val_manifest data/val_single_speaker.json \

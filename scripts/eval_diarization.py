@@ -1,38 +1,3 @@
-"""
-Speaker Diarization Evaluation Pipeline
-
-Synthesize multi-speaker test audio, run Sortformer diarization inference
-(streaming or non-streaming), compute DER metrics, and generate reports
-with charts and Audacity labels.
-
-Usage examples:
-
-  # Full pipeline: synthesize + infer + evaluate
-  uv run scripts/eval_diarization.py \
-      --source_manifest data/val_single_speaker.json \
-      --num_samples 200 \
-      --max_speakers 4 \
-      --streaming \
-      --eval_mode all
-
-  # Non-streaming mode
-  uv run scripts/eval_diarization.py \
-      --source_manifest data/val_single_speaker.json \
-      --no_streaming
-
-  # Evaluate on pre-existing data (skip synthesis)
-  uv run scripts/eval_diarization.py \
-      --audio_dir data/eval_audio/ \
-      --rttm_dir data/eval_rttm/ \
-      --streaming
-
-  # Re-run metrics only (skip synthesis and inference)
-  uv run scripts/eval_diarization.py \
-      --skip_synthesis --skip_inference \
-      --eval_data_dir data/eval_diarization \
-      --output_dir data/eval_results
-"""
-
 import argparse
 import json
 import os
@@ -40,127 +5,58 @@ import sys
 
 from loguru import logger
 
-from multitalker_asr.config import EvalConfig
-from multitalker_asr.eval.synthesize_eval_data import (
-    synthesize_eval_set,
-    load_eval_manifest_from_dirs,
+from multitalker_asr.configs import EvalConfig
+from multitalker_asr.eval import (
+    DiarizationEvaluator,
+    EvalDataSynthesizer,
+    EvaluationPipeline,
 )
-from multitalker_asr.eval.diar_inference import run_diar_inference
-from multitalker_asr.eval.metrics import calculate_metrics, save_metrics
-from multitalker_asr.eval.report import generate_report
+from multitalker_asr.eval.metrics import DERMetric
+from multitalker_asr.eval.reporters import ChartReporter, TextReporter
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Speaker Diarization Evaluation Pipeline",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
-    )
+    parser = argparse.ArgumentParser(description="Speaker Diarization Evaluation Pipeline")
 
-    # Data source
     source = parser.add_argument_group("Data Source")
-    source.add_argument(
-        "--source_manifest",
-        type=str,
-        default=None,
-        help="Single-speaker manifest (JSONL) for synthesizing eval data",
-    )
-    source.add_argument(
-        "--audio_dir",
-        type=str,
-        default=None,
-        help="Directory of pre-mixed WAV files (skip synthesis)",
-    )
-    source.add_argument(
-        "--rttm_dir",
-        type=str,
-        default=None,
-        help="Directory of ground truth RTTM files (skip synthesis)",
-    )
+    source.add_argument("--source_manifest", type=str, default=None)
+    source.add_argument("--audio_dir", type=str, default=None)
+    source.add_argument("--rttm_dir", type=str, default=None)
 
-    # Synthesis
     synth = parser.add_argument_group("Synthesis")
     synth.add_argument("--num_samples", type=int, default=200)
     synth.add_argument("--max_speakers", type=int, default=4)
     synth.add_argument("--min_speakers", type=int, default=2)
-    synth.add_argument(
-        "--eval_data_dir",
-        type=str,
-        default="data/eval_diarization",
-        help="Directory to store synthesized eval data",
-    )
+    synth.add_argument("--eval_data_dir", type=str, default="data/eval_diarization")
 
-    # Model
     model = parser.add_argument_group("Model")
-    model.add_argument(
-        "--diar_model_path",
-        type=str,
-        default="models/diar_streaming_sortformer_4spk-v2.1.nemo",
-    )
+    model.add_argument("--diar_model_path", type=str, default="models/diar_streaming_sortformer_4spk-v2.1.nemo")
     model.add_argument("--device", type=str, default="cuda")
     model.add_argument("--cuda_id", type=int, default=0)
 
-    # Inference mode
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--streaming",
-        action="store_true",
-        default=True,
-        help="Use streaming inference (default)",
-    )
-    mode.add_argument(
-        "--no_streaming",
-        action="store_true",
-        help="Use non-streaming (offline) inference",
-    )
+    mode.add_argument("--streaming", action="store_true", default=True)
+    mode.add_argument("--no_streaming", action="store_true")
     parser.add_argument("--batch_size", type=int, default=1)
 
-    # Evaluation
     evl = parser.add_argument_group("Evaluation")
-    evl.add_argument(
-        "--eval_mode",
-        type=str,
-        default="all",
-        choices=["full", "fair", "forgiving", "all"],
-        help="DER evaluation mode(s)",
-    )
+    evl.add_argument("--eval_mode", type=str, default="all", choices=["full", "fair", "forgiving", "all"])
     evl.add_argument("--collar", type=float, default=0.25)
-    evl.add_argument(
-        "--ignore_overlap", action="store_true", default=False
-    )
+    evl.add_argument("--ignore_overlap", action="store_true", default=False)
 
-    # Output
     out = parser.add_argument_group("Output")
-    out.add_argument(
-        "--output_dir", type=str, default="data/eval_results"
-    )
-    out.add_argument(
-        "--no_charts", action="store_true", help="Skip chart generation"
-    )
-    out.add_argument(
-        "--no_audacity_labels",
-        action="store_true",
-        help="Skip Audacity label generation",
-    )
+    out.add_argument("--output_dir", type=str, default="data/eval_results")
+    out.add_argument("--no_charts", action="store_true")
+    out.add_argument("--no_audacity_labels", action="store_true")
 
-    # Pipeline control
     pipe = parser.add_argument_group("Pipeline Control")
-    pipe.add_argument(
-        "--skip_synthesis",
-        action="store_true",
-        help="Skip synthesis, use existing data in eval_data_dir",
-    )
-    pipe.add_argument(
-        "--skip_inference",
-        action="store_true",
-        help="Skip inference, only recompute metrics from existing RTTMs",
-    )
+    pipe.add_argument("--skip_synthesis", action="store_true")
+    pipe.add_argument("--skip_inference", action="store_true")
 
     return parser.parse_args()
 
 
 def build_config(args):
-    """Build EvalConfig from parsed arguments."""
     return EvalConfig(
         diar_model_path=args.diar_model_path,
         device=args.device,
@@ -183,9 +79,7 @@ def build_config(args):
     )
 
 
-def _load_existing_manifest(eval_data_dir, output_dir):
-    """Load eval manifest from a previous synthesis run or inference run."""
-    # Check output_dir first (has hyp_rttm paths from previous inference)
+def load_existing_manifest(eval_data_dir, output_dir):
     for search_dir in [output_dir, eval_data_dir]:
         manifest_path = os.path.join(search_dir, "eval_manifest.json")
         if os.path.exists(manifest_path):
@@ -209,25 +103,23 @@ def main():
     logger.info(f"Mode: {'Streaming' if cfg.streaming else 'Non-streaming'}")
     logger.info("=" * 60)
 
-    # ── Step 1: Prepare eval data ──────────────────────────────────
+    synthesizer = EvalDataSynthesizer()
     eval_manifest = None
 
     if args.skip_synthesis:
         logger.info("Skipping synthesis, loading existing manifest...")
         if cfg.audio_dir and cfg.rttm_dir:
-            eval_manifest = load_eval_manifest_from_dirs(cfg.audio_dir, cfg.rttm_dir)
+            eval_manifest = synthesizer.load_from_dirs(cfg.audio_dir, cfg.rttm_dir)
         else:
-            eval_manifest = _load_existing_manifest(cfg.eval_data_dir, cfg.output_dir)
+            eval_manifest = load_existing_manifest(cfg.eval_data_dir, cfg.output_dir)
     elif cfg.audio_dir and cfg.rttm_dir:
         logger.info("Using pre-existing audio and RTTM directories...")
-        eval_manifest = load_eval_manifest_from_dirs(cfg.audio_dir, cfg.rttm_dir)
+        eval_manifest = synthesizer.load_from_dirs(cfg.audio_dir, cfg.rttm_dir)
     elif cfg.source_manifest:
         logger.info("Synthesizing evaluation data...")
-        eval_manifest = synthesize_eval_set(cfg)
+        eval_manifest = synthesizer.synthesize(cfg)
     else:
-        logger.error(
-            "Must provide either --source_manifest or --audio_dir + --rttm_dir"
-        )
+        logger.error("Must provide either --source_manifest or --audio_dir + --rttm_dir")
         sys.exit(1)
 
     if not eval_manifest:
@@ -236,34 +128,25 @@ def main():
 
     logger.info(f"Eval set: {len(eval_manifest)} files")
 
-    # ── Step 2: Run inference ──────────────────────────────────────
     if args.skip_inference:
         logger.info("Skipping inference, loading existing results...")
-        # Ensure hyp_rttm paths exist in manifest
         hyp_rttm_dir = os.path.join(cfg.output_dir, "hyp_rttm")
         for entry in eval_manifest:
             if "hyp_rttm_filepath" not in entry:
-                hyp_path = os.path.join(
-                    hyp_rttm_dir, f"{entry['sample_id']}.rttm"
-                )
+                hyp_path = os.path.join(hyp_rttm_dir, f"{entry['sample_id']}.rttm")
                 if os.path.exists(hyp_path):
                     entry["hyp_rttm_filepath"] = os.path.abspath(hyp_path)
                 else:
-                    logger.warning(
-                        f"Hypothesis RTTM not found for {entry['sample_id']}"
-                    )
+                    logger.warning(f"Hypothesis RTTM not found for {entry['sample_id']}")
     else:
-        logger.info(
-            f"Running {'streaming' if cfg.streaming else 'offline'} inference..."
-        )
-        eval_manifest = run_diar_inference(cfg, eval_manifest)
+        logger.info(f"Running {'streaming' if cfg.streaming else 'offline'} inference...")
+        evaluator = DiarizationEvaluator(cfg)
+        eval_manifest = evaluator.evaluate(eval_manifest)
 
-    # Save manifest with inference results
     os.makedirs(cfg.output_dir, exist_ok=True)
     manifest_out = os.path.join(cfg.output_dir, "eval_manifest.json")
     with open(manifest_out, "w") as f:
         for entry in eval_manifest:
-            # Remove large chunk latency arrays from saved manifest
             entry_save = dict(entry)
             if "latency" in entry_save:
                 lat = dict(entry_save["latency"])
@@ -271,32 +154,31 @@ def main():
                 entry_save["latency"] = lat
             f.write(json.dumps(entry_save) + "\n")
 
-    # ── Step 3: Compute metrics ────────────────────────────────────
-    # Check all entries have hypothesis RTTMs
-    valid_entries = [
-        e for e in eval_manifest if e.get("hyp_rttm_filepath")
-    ]
+    valid_entries = [e for e in eval_manifest if e.get("hyp_rttm_filepath")]
     if not valid_entries:
         logger.error("No valid entries with hypothesis RTTMs found")
         sys.exit(1)
 
     if len(valid_entries) < len(eval_manifest):
-        logger.warning(
-            f"Only {len(valid_entries)}/{len(eval_manifest)} files have "
-            f"hypothesis RTTMs"
-        )
+        logger.warning(f"Only {len(valid_entries)}/{len(eval_manifest)} files have hypothesis RTTMs")
 
     logger.info("Computing DER metrics...")
-    all_results = calculate_metrics(valid_entries, cfg)
+    der_metric = DERMetric(eval_mode=cfg.eval_mode)
+    all_results = der_metric.compute_all_modes(valid_entries, streaming=cfg.streaming)
 
-    # Save raw metrics
-    save_metrics(all_results, cfg.output_dir)
+    metrics_path = os.path.join(cfg.output_dir, "metrics.json")
+    with open(metrics_path, "w", encoding="utf-8") as f:
+        json.dump(all_results, f, indent=2, ensure_ascii=False)
+    logger.info(f"Metrics saved to {metrics_path}")
 
-    # ── Step 4: Generate report ────────────────────────────────────
     logger.info("Generating report...")
-    generate_report(all_results, cfg)
+    text_reporter = TextReporter(model_path=cfg.diar_model_path, streaming=cfg.streaming)
+    text_reporter.generate(all_results, cfg.output_dir)
 
-    # ── Summary ────────────────────────────────────────────────────
+    if cfg.generate_charts:
+        chart_reporter = ChartReporter()
+        chart_reporter.generate(all_results, cfg.output_dir)
+
     logger.info("")
     logger.info("=" * 60)
     logger.info("EVALUATION COMPLETE")
@@ -313,12 +195,6 @@ def main():
 
     logger.info("")
     logger.info(f"Results: {cfg.output_dir}")
-    logger.info(f"  Report:  {os.path.join(cfg.output_dir, 'report.txt')}")
-    logger.info(f"  Metrics: {os.path.join(cfg.output_dir, 'metrics.json')}")
-    if cfg.generate_charts:
-        logger.info(f"  Charts:  {os.path.join(cfg.output_dir, 'charts/')}")
-    if cfg.generate_audacity_labels:
-        logger.info(f"  Labels:  {os.path.join(cfg.output_dir, 'audacity_labels/')}")
 
 
 if __name__ == "__main__":

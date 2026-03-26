@@ -77,7 +77,8 @@ CONFIG_MODEL="model_config.yaml"
 
 echo ""
 echo "[Step 6/7] Starting training (Streaming Mode)..."
-uv run scripts/finetune.py \
+uv run scripts/train.py \
+    --mode train \
     --model_path "$OUTPUT_MODEL" \
     --config_path "$CONFIG_MODEL" \
     --tokenizer_dir "$OUTPUT_DIR/vi_tokenizer.model" \
