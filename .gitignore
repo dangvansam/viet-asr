@@ -11,9 +11,11 @@ wheels/
 # Virtual environments
 .venv
 
-data/
+data
+!src/multitalker_asr/data
 checkpoints/
 models/
 spm_bin/
 temp*
 wandb
+.rune/metrics

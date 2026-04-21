@@ -4,6 +4,7 @@ from .training import TrainingConfig, TrainingMode
 from .inference import InferenceConfig
 from .data import DataConfig
 from .eval import EvalConfig
+from .multitask import MultiTaskConfig
 from .factory import get_config
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "InferenceConfig",
     "DataConfig",
     "EvalConfig",
+    "MultiTaskConfig",
     "get_config",
 ]

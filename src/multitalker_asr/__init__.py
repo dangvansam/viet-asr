@@ -1,5 +1,6 @@
-from .configs import ModelConfig, TrainingConfig, InferenceConfig, DataConfig, EvalConfig
-from .models import BaseASRModel, MultitalkerASRModel, TokenizerExtender
+from .configs import ModelConfig, TrainingConfig, InferenceConfig, DataConfig, EvalConfig, MultiTaskConfig
+from .models import BaseASRModel, MultitalkerASRModel, MultitalkerMultiTaskModel, TokenizerExtender, TaskTokenRegistry, PromptEmbedding
+from .training.losses import MultiTaskLoss
 from .models.heads import BaseHead, SpeakerHead, GenderHead, EmotionHead, AgeHead
 from .data import (
     DataLoaderFactory,
@@ -29,9 +30,14 @@ __all__ = [
     "InferenceConfig",
     "DataConfig",
     "EvalConfig",
+    "MultiTaskConfig",
     "BaseASRModel",
     "MultitalkerASRModel",
+    "MultitalkerMultiTaskModel",
     "TokenizerExtender",
+    "MultiTaskLoss",
+    "TaskTokenRegistry",
+    "PromptEmbedding",
     "BaseHead",
     "SpeakerHead",
     "GenderHead",
