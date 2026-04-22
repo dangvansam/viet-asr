@@ -1,0 +1,29 @@
+pipeline_name: raw
+stages: [extract_audio, vad_diarize, transcribe, align, gender_classify, write_manifest]
+input_dir: ""        # override at CLI with --input_dir
+output_dir: ""       # override at CLI with --output_dir
+device: cuda
+
+vad:
+  min_duration: 3.0
+  max_duration: 30.0
+  model: pyannote-onnx
+
+transcribe:
+  model: FunAudioLLM/Fun-ASR-MLT-Nano-2512
+  language: auto
+  output_itn: true
+  itn_only: false
+
+align:
+  model: Qwen/Qwen3-ForcedAligner-0.6B
+  language: Vietnamese
+  dtype: bfloat16
+
+gender:
+  url: http://localhost:8000/predict
+  model: ensemble
+
+manifest:
+  output_filename: manifest.jsonl
+  text_field: text_itn

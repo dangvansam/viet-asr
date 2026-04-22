@@ -1,0 +1,37 @@
+pipeline_name: pretranscribed
+stages: [enrich_labels, transcribe, gender_classify, write_manifest]
+input_dir: ""        # override at CLI with --input_dir
+output_dir: ""       # override at CLI with --output_dir
+device: cuda
+
+vad:
+  min_duration: 3.0
+  max_duration: 30.0
+  model: pyannote-onnx
+
+transcribe:
+  model: FunAudioLLM/Fun-ASR-MLT-Nano-2512
+  language: auto
+  output_itn: true
+  itn_only: true     # text normalization only — audio already transcribed
+
+align:
+  model: Qwen/Qwen3-ForcedAligner-0.6B
+  language: Vietnamese
+  dtype: bfloat16
+
+gender:
+  url: http://localhost:8000/predict
+  model: ensemble
+
+enrich:
+  input_format: pipe_delimited
+  metadata_path: ""   # set at CLI: --enrich_metadata /path/to/metadata.txt
+  emotion_mapping:
+    NEU: neutral
+    POS: positive
+    NEG: negative
+
+manifest:
+  output_filename: manifest.jsonl
+  text_field: text_itn

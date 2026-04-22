@@ -9,12 +9,12 @@ with 6 multitask labels: `text`, `emotion`, `gender`, `language`, `textnorm`, `a
 
 | # | Phase | Key Output | Status |
 |---|-------|------------|--------|
-| 1 | Foundation: Config + Checkpoint + BaseStage | `pipeline/config.py`, `pipeline/checkpoint.py`, `pipeline/base_stage.py` | ⬚ Pending |
-| 2 | Preprocessing Stages: extract_audio + vad_diarize | `stages/extract_audio.py`, `stages/vad_diarize.py` | ⬚ Pending |
-| 3 | Transcription Stage: FunASR MLT-Nano | `stages/transcribe.py` (audio→text+ITN+emotion) | ⬚ Pending |
-| 4 | Alignment Stage: Qwen3ForcedAligner | `stages/align.py` (text+audio→word timestamps) | ⬚ Pending |
-| 5 | Enrichment Stages: gender + label mapping | `stages/gender_classify.py`, `stages/enrich_labels.py` | ⬚ Pending |
-| 6 | Manifest + Orchestrator: write + CLI | `stages/write_manifest.py`, `pipeline.py`, `scripts/prepare_data.py`, YAML configs | ⬚ Pending |
+| 1 | Foundation: Config + Checkpoint + BaseStage | `pipeline/config.py`, `pipeline/checkpoint.py`, `pipeline/base_stage.py` | ✅ Done |
+| 2 | Preprocessing Stages: extract_audio + vad_diarize | `stages/extract_audio.py`, `stages/vad_diarize.py` | ✅ Done |
+| 3 | Transcription Stage: FunASR MLT-Nano | `stages/transcribe.py` (audio→text+ITN+emotion) | ✅ Done |
+| 4 | Alignment Stage: Qwen3ForcedAligner | `stages/align.py` (text+audio→word timestamps) | ✅ Done |
+| 5 | Enrichment Stages: gender + label mapping | `stages/gender_classify.py`, `stages/enrich_labels.py` | ✅ Done |
+| 6 | Manifest + Orchestrator: write + CLI | `stages/write_manifest.py`, `pipeline.py`, `scripts/run_pipeline.py`, YAML configs | ✅ Done |
 
 ## Architecture
 
