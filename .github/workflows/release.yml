@@ -7,16 +7,18 @@
 # GitHub Packages (Java/Android) uses the built-in GITHUB_TOKEN — no secret needed.
 #
 # Triggers:
-#   - push a tag like v0.2.0  -> build natives, cut a Release, publish every binding
+#   - push a tag like v0.2.0  -> publish a real release  (version = tag)
+#   - push to the sdk branch  -> publish a dev prerelease (version = X.Y.Z-dev.<run>)
 #   - run manually            -> build natives only (publish steps are skipped)
 #
 # The bindings ship small: each one downloads the matching native from this
 # workflow's GitHub Release on install/build/first-run. pypi-publish.yml and
-# docker-publish.yml run independently off the same tag.
+# docker-publish.yml run independently off the same trigger.
 name: release
 
 on:
   push:
+    branches: ["sdk"]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -100,10 +102,12 @@ jobs:
         id: ver
         run: |
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            v="${GITHUB_REF_NAME#v}"
+            v="${GITHUB_REF_NAME#v}"                       # v0.2.0 -> 0.2.0
           else
+            # sdk branch / manual run: X.Y.Z-dev.<run> prerelease.
+            base="$(python3 -c "import json;print(json.load(open('bindings/nodejs/package.json'))['version'].split('-')[0])")"
             v="${{ github.event.inputs.version }}"
-            v="${v:-0.0.0-dev}"
+            v="${v:-${base}-dev.${GITHUB_RUN_NUMBER}}"
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "release version: $v"
@@ -121,9 +125,13 @@ jobs:
           ls -la assets
 
       - name: Create / update Release
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
         uses: softprops/action-gh-release@v2
         with:
+          # On the sdk branch this creates the tag too; tags pushed by
+          # GITHUB_TOKEN do not re-trigger this workflow.
+          tag_name: v${{ steps.ver.outputs.version }}
+          prerelease: ${{ github.ref_type != 'tag' }}
           files: assets/*
           fail_on_unmatched_files: true
 
@@ -140,7 +148,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - run: python3 scripts/stamp-version.py "${{ needs.github-release.outputs.version }}"
       - name: Publish
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
         working-directory: bindings/nodejs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -166,7 +174,7 @@ jobs:
         working-directory: bindings/webjs
         run: bash build-wasm.sh
       - name: Publish
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
         working-directory: bindings/webjs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -185,11 +193,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: python3 scripts/stamp-version.py "${{ needs.github-release.outputs.version }}"
       - name: Package (dry run)
-        if: github.ref_type != 'tag'
+        if: github.ref_type != 'tag' && github.ref_name != 'sdk'
         working-directory: bindings/rust
         run: cargo package --allow-dirty --no-verify
       - name: Publish
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
         working-directory: bindings/rust
         run: cargo publish --allow-dirty --token "${{ secrets.CARGO_REGISTRY_TOKEN }}"
 
@@ -209,7 +217,7 @@ jobs:
         working-directory: bindings/java
         run: mvn -B -ntp package
       - name: Deploy
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
         working-directory: bindings/java
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -240,7 +248,7 @@ jobs:
         working-directory: bindings/android
         run: gradle :lib:assembleRelease
       - name: Publish
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
         working-directory: bindings/android
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -261,7 +269,7 @@ jobs:
         working-directory: bindings/csharp
         run: dotnet pack Vietasr/Vietasr.csproj -c Release -o nupkg
       - name: Push
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
         working-directory: bindings/csharp
         run: |
           dotnet nuget push "nupkg/*.nupkg" \
