@@ -146,7 +146,7 @@ Model: **66 MB**, int8-quantized, 4972-token Vietnamese BPE vocab. Fits in memor
 <summary><b>Node.js</b></summary>
 
 ```js
-const { Pipeline } = require("vietasr");
+const { Pipeline } = require("viet-asr");
 const pipe = await Pipeline.preset("transcribe");
 console.log(pipe.transcribe("audio.wav").text);
 ```
@@ -195,7 +195,7 @@ Console.WriteLine(pipe.Transcribe("audio.wav").Text);
 <summary><b>Browser</b></summary>
 
 ```js
-import { Pipeline } from "@vietasr/web";
+import { Pipeline } from "@viet-asr/web";
 const pipe = await Pipeline.create();
 console.log(await pipe.transcribe(pcmFloat32, 16000));
 ```
@@ -238,6 +238,7 @@ Full design: [docs/architecture.md](docs/architecture.md).
 - ✅ Streaming + batch Vietnamese ASR
 - ✅ 9 bindings — C, C++, Python, Node.js, Go, Java/Kotlin, C#, Rust, WebAssembly
 - ✅ Android native libraries (arm64 / armv7 / x86_64)
+- ✅ Published to PyPI, npm, crates.io, NuGet & GitHub Packages
 - ✅ Model bundled in the SDK, zero config
 - ✅ Any sample rate, mono / stereo
 - ✅ Endpoint-aware segmentation
@@ -246,7 +247,7 @@ Full design: [docs/architecture.md](docs/architecture.md).
 **Coming next**
 
 - ⏳ iOS / macOS — Swift package + `.xcframework`
-- ⏳ Android `.aar` on Maven Central
+- ⏳ Java & Android on Maven Central (currently on GitHub Packages)
 - ⏳ `punctuation` module — restore `. , ? !`
 - ⏳ `itn` module — inverse text normalization (`"hai mươi"` → `20`)
 - ⏳ `diarization` module — who-spoke-when
