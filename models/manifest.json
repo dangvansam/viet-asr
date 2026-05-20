@@ -1,0 +1,29 @@
+{
+  "manifest_version": 1,
+  "updated": "2026-05-20",
+  "modules": {
+    "vietasr": {
+      "default_version": "1",
+      "default_backend": "onnx",
+      "versions": ["1"],
+      "bundled": true,
+      "files": {
+        "onnx": ["model.onnx", "vocab.txt"]
+      },
+      "backend_recommendations": {
+        "android": "onnx",
+        "ios": "onnx",
+        "macos": "onnx",
+        "linux": "onnx",
+        "windows": "onnx",
+        "browser": "onnx",
+        "default": "onnx"
+      }
+    },
+    "vad": {
+      "default_version": "1",
+      "default_backend": "onnx",
+      "versions": ["1"]
+    }
+  }
+}

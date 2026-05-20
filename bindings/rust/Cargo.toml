@@ -1,0 +1,21 @@
+[package]
+name = "vietasr"
+version = "0.1.0"
+edition = "2021"
+description = "Universal Vietnamese Speech AI SDK — Rust binding"
+license = "Apache-2.0"
+repository = "https://github.com/dangvansam/viet-asr"
+keywords = ["asr", "speech-recognition", "vietnamese", "onnx", "offline"]
+categories = ["multimedia::audio", "api-bindings"]
+
+[lib]
+name = "vietasr"
+path = "src/lib.rs"
+
+[[example]]
+name = "quickstart"
+path = "examples/quickstart.rs"
+
+[[example]]
+name = "streaming"
+path = "examples/streaming.rs"

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["scikit-build-core>=0.10"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "vietasr"
+version = "0.1.0"
+description = "Universal Vietnamese Speech AI SDK"
+authors = [{name = "vietasr contributors"}]
+license = {text = "Apache-2.0"}
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "cffi>=1.16",
+    "numpy>=1.21",
+]
+keywords = ["asr", "speech recognition", "vietnamese", "vietasr"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+[project.optional-dependencies]
+streaming = ["soundfile>=0.12", "sounddevice>=0.4"]
+dev = ["pytest>=7", "pytest-cov>=4"]
+
+[project.scripts]
+vietasr = "vietasr.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/dangvansam/viet-asr"
+Source   = "https://github.com/dangvansam/viet-asr"
+
+[tool.scikit-build]
+cmake.source-dir   = "."
+cmake.build-type   = "Release"
+wheel.packages     = ["vietasr"]
+wheel.install-dir  = "vietasr/_native"
+build-dir          = "build/{wheel_tag}"
+
+[tool.scikit-build.cmake.define]
+VIETASR_BUILD_TESTS    = "OFF"
+VIETASR_BUILD_EXAMPLES = "OFF"
+VIETASR_BUILD_SHARED   = "ON"

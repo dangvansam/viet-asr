@@ -1,0 +1,18 @@
+{
+  "model": "model.onnx",
+  "total_size": 69420285,
+  "sha256": "b34e699e5557f87741c6fca80246267268922c9d57045602da6fdf77039f0057",
+  "chunk_size": 47185920,
+  "chunks": [
+    {
+      "name": "model.onnx.part00",
+      "size": 47185920,
+      "sha256": "5076517290a7540a3fdb0df465f1861cb73800ffefbf83fa6dc57bd22bcb7712"
+    },
+    {
+      "name": "model.onnx.part01",
+      "size": 22234365,
+      "sha256": "32642ff88e406318509ffe1b69421ee0dbc6ad1fb9ac4175dae9fd745af49b5a"
+    }
+  ]
+}

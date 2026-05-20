@@ -1,0 +1,15 @@
+# Keep the Docker build context small. The image only needs core/, models/,
+# bindings/python/ and server/ — everything below is build output or unrelated.
+.git/
+build/
+build-core/
+**/build/
+**/node_modules/
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+*.log
+bindings/webjs/dist/
+.claude/
+.rune/

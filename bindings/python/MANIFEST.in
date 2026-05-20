@@ -1,0 +1,5 @@
+recursive-include vietasr *.py
+include CMakeLists.txt
+include pyproject.toml
+graft ../../core
+prune ../../core/build
