@@ -94,6 +94,9 @@ jobs:
           CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*"
           # PyPy is not supported by this cffi setup; musllinux/Alpine is niche.
           CIBW_SKIP: "pp* *-musllinux*"
+          # onnxruntime's prebuilt libs need a newer glibc than manylinux2014.
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
           CIBW_TEST_COMMAND: 'python -c "import vietasr; print(vietasr.__version__)"'
           CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=11.0"
           # The package's CMake builds ../../core, which sits outside the package

@@ -14,9 +14,16 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../core ${CMAKE_BINARY_DIR}/_vieta
 # With VIETASR_INSTALL=OFF, core leaves the target unversioned, so this ships a
 # single libvietasr.so — cffi loads it by plain name and a wheel zip would
 # otherwise materialise versioned SONAME symlinks as full 66 MB copies.
+# RPATH must point at the bundled onnxruntime sibling: $ORIGIN on Linux,
+# @loader_path on macOS (the dynamic loader does not understand $ORIGIN there).
+if(APPLE)
+    set(_vietasr_rpath "@loader_path")
+else()
+    set(_vietasr_rpath "$ORIGIN")
+endif()
 set_target_properties(vietasr PROPERTIES
-    BUILD_RPATH    "$ORIGIN"
-    INSTALL_RPATH  "$ORIGIN"
+    BUILD_RPATH    "${_vietasr_rpath}"
+    INSTALL_RPATH  "${_vietasr_rpath}"
     SKIP_BUILD_RPATH FALSE
 )
 
