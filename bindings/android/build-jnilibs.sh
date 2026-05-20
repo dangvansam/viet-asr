@@ -9,7 +9,9 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-${ANDROID_NDK_LATEST_HOME:-}}}"
 [ -n "$NDK" ] || { echo "set ANDROID_NDK_HOME to the Android NDK path" >&2; exit 1; }
-ORT_VERSION="1.20.1"
+# onnxruntime-android has no 1.20.1 on Maven Central (desktop-only patch);
+# 1.20.0 is ABI-compatible for the stable ONNX Runtime C API.
+ORT_VERSION="1.20.0"
 ABIS=(arm64-v8a armeabi-v7a x86_64)
 
 # onnxruntime-android AAR ships per-ABI libonnxruntime.so + the C API headers.
