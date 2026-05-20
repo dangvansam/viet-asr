@@ -14,32 +14,152 @@ That's the whole thing. The model ships inside the SDK — nothing to download. 
 
 ---
 
-## ⚡ Install — one line, any stack
+## ⚡ Install
 
-Every binding installs two ways — from its **language package registry**, or **directly from this git repo**.
+Every binding installs from its **package registry** or **directly from git** — both are
+shown per language below. Each wraps the **same C++ core** and produces **byte-identical
+transcripts**, so the API is the same everywhere.
 
-| Language | Package registry | Direct from git |
-|---|---|---|
-| 🐍 **Python** | `pip install viet-asr` | `pip install "git+https://github.com/dangvansam/viet-asr.git#subdirectory=bindings/python"` |
-| 🟢 **Node.js** | `npm install viet-asr` | clone, then `npm install ./bindings/nodejs` |
-| 🐹 **Go** | `go get github.com/dangvansam/viet-asr/bindings/go` | same command — `go get` resolves straight from git |
-| 🦀 **Rust** | `cargo add viet-asr` | `viet-asr = { git = "https://github.com/dangvansam/viet-asr", package = "viet-asr" }` |
-| ☕ **Java / Kotlin** | `io.github.dangvansam:viet-asr:0.1.0` ¹ | JitPack: `com.github.dangvansam:viet-asr:<tag>` |
-| 🔷 **C# / .NET** | `dotnet add package viet-asr` | clone, then `dotnet pack bindings/csharp/Vietasr` |
-| 🌐 **Browser** | `npm install @viet-asr/web` | clone, then `cd bindings/webjs && npm run build` |
-| 🤖 **Android** | `io.github.dangvansam:viet-asr:0.1.0` ¹ | clone, then `bindings/android/build-jnilibs.sh` + `./gradlew :lib:assembleRelease` |
-| ⚙️ **C / C++** | link `libvietasr` + `#include <vietasr.h>` | build `core/` with CMake |
+The platform native library (with the 66 MB model baked in) is fetched once from the
+matching [GitHub Release](https://github.com/dangvansam/viet-asr/releases) on install or
+first use, then cached under `~/.cache/viet-asr/`. Set `VIETASR_NATIVE_DIR` to point at a
+local build instead.
 
-¹ Published to **GitHub Packages** — add the repo to your build:
-`maven { url = uri("https://maven.pkg.github.com/dangvansam/viet-asr") }` with a GitHub
-token. No-auth alternative: the JitPack coordinate in the right column.
+<details open>
+<summary>🐍 <b>Python</b> — <code>pip install viet-asr</code></summary>
 
-Every binding wraps the **same C++ core** and produces **byte-identical transcripts**. Pick your language — the API is the same everywhere.
+```bash
+# from PyPI
+pip install viet-asr
 
-> The platform native library (with the model baked in) is fetched once from the
-> matching [GitHub Release](https://github.com/dangvansam/viet-asr/releases) on
-> install or first use, then cached under `~/.cache/viet-asr/`. Set
-> `VIETASR_NATIVE_DIR` to point at a local build instead.
+# from git
+pip install "git+https://github.com/dangvansam/viet-asr.git#subdirectory=bindings/python"
+```
+
+Python 3.8+. The PyPI wheel bundles the native library and model — nothing else to fetch.
+Installing from git compiles `core/` and needs CMake and a C++17 compiler.
+</details>
+
+<details>
+<summary>🟢 <b>Node.js</b> — <code>npm install viet-asr</code></summary>
+
+```bash
+# from npm
+npm install viet-asr
+
+# from git
+git clone https://github.com/dangvansam/viet-asr
+npm install ./viet-asr/bindings/nodejs
+```
+
+Node.js 16+. A `postinstall` step downloads the native library for your platform.
+</details>
+
+<details>
+<summary>🐹 <b>Go</b> — <code>go get …/bindings/go</code></summary>
+
+```bash
+go get github.com/dangvansam/viet-asr/bindings/go
+```
+
+Go 1.18+. `go get` resolves straight from git — the same command serves a tagged release
+or the latest branch (append `@sdk`). Pure Go (purego, no cgo); the native library is
+downloaded on first use.
+</details>
+
+<details>
+<summary>🦀 <b>Rust</b> — <code>cargo add viet-asr</code></summary>
+
+```bash
+# from crates.io
+cargo add viet-asr
+```
+
+From git, in `Cargo.toml`:
+
+```toml
+[dependencies]
+viet-asr = { git = "https://github.com/dangvansam/viet-asr", package = "viet-asr" }
+```
+
+`build.rs` downloads the native library at build time.
+</details>
+
+<details>
+<summary>☕ <b>Java / Kotlin</b> — <code>io.github.dangvansam:viet-asr</code></summary>
+
+Gradle — from **GitHub Packages** (needs a GitHub token) or **JitPack** (no auth):
+
+```kotlin
+repositories {
+    // GitHub Packages — add your GitHub username + token under credentials { }
+    maven { url = uri("https://maven.pkg.github.com/dangvansam/viet-asr") }
+    // JitPack — no authentication required
+    maven { url = uri("https://jitpack.io") }
+}
+dependencies {
+    implementation("io.github.dangvansam:viet-asr:0.1.0")    // GitHub Packages
+    // implementation("com.github.dangvansam:viet-asr:<tag>") // JitPack
+}
+```
+
+Java 11+. The native library is downloaded on first use.
+</details>
+
+<details>
+<summary>🔷 <b>C# / .NET</b> — <code>dotnet add package viet-asr</code></summary>
+
+```bash
+# from NuGet
+dotnet add package viet-asr
+```
+
+From git: clone the repo and `dotnet pack bindings/csharp/Vietasr`. .NET 8+. The native
+library is resolved and downloaded on first use.
+</details>
+
+<details>
+<summary>🌐 <b>Browser</b> — <code>npm install @viet-asr/web</code></summary>
+
+```bash
+# from npm
+npm install @viet-asr/web
+```
+
+From git: clone the repo, then `cd bindings/webjs && npm run build`. Ships the WASM core
+plus `onnxruntime-web`; the model is fetched at runtime (override with the `modelUrl`
+option).
+</details>
+
+<details>
+<summary>🤖 <b>Android</b> — <code>io.github.dangvansam:viet-asr</code></summary>
+
+Gradle, from **GitHub Packages**:
+
+```kotlin
+repositories {
+    // add your GitHub username + token under credentials { }
+    maven { url = uri("https://maven.pkg.github.com/dangvansam/viet-asr") }
+}
+dependencies {
+    implementation("io.github.dangvansam:viet-asr:0.1.0")
+}
+```
+
+minSdk 24. The AAR bundles `arm64-v8a`, `armeabi-v7a` and `x86_64`. From git: clone, run
+`bindings/android/build-jnilibs.sh`, then `./gradlew :lib:assembleRelease`.
+</details>
+
+<details>
+<summary>⚙️ <b>C / C++</b> — link <code>libvietasr</code></summary>
+
+```bash
+cmake -S core -B build && cmake --build build
+```
+
+Then link `libvietasr` and `#include <vietasr.h>`
+([core/include/vietasr.h](core/include/vietasr.h)).
+</details>
 
 ---
 
@@ -238,7 +358,6 @@ Full design: [docs/architecture.md](docs/architecture.md).
 - ✅ Streaming + batch Vietnamese ASR
 - ✅ 9 bindings — C, C++, Python, Node.js, Go, Java/Kotlin, C#, Rust, WebAssembly
 - ✅ Android native libraries (arm64 / armv7 / x86_64)
-- ✅ Published to PyPI, npm, crates.io, NuGet & GitHub Packages
 - ✅ Model bundled in the SDK, zero config
 - ✅ Any sample rate, mono / stereo
 - ✅ Endpoint-aware segmentation
@@ -247,7 +366,7 @@ Full design: [docs/architecture.md](docs/architecture.md).
 **Coming next**
 
 - ⏳ iOS / macOS — Swift package + `.xcframework`
-- ⏳ Java & Android on Maven Central (currently on GitHub Packages)
+- ⏳ Android `.aar` on Maven Central
 - ⏳ `punctuation` module — restore `. , ? !`
 - ⏳ `itn` module — inverse text normalization (`"hai mươi"` → `20`)
 - ⏳ `diarization` module — who-spoke-when
