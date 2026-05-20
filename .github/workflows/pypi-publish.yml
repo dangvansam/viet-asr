@@ -1,0 +1,157 @@
+# Build native wheels for the `vietasr` Python package and publish to PyPI.
+#
+# Setup once — add repository secrets (Settings → Secrets and variables → Actions):
+#   PYPI_API_TOKEN       — token from https://pypi.org/manage/account/token/
+#   TEST_PYPI_API_TOKEN  — token from https://test.pypi.org/manage/account/token/
+#
+# Triggers:
+#   - push a tag like v0.1.0   -> build all wheels, publish to PyPI      (version = tag)
+#   - push to the sdk branch   -> build all wheels, publish to TestPyPI  (version = X.Y.Z.dev<run>)
+#   - run manually             -> build wheels only (publish runs only on sdk / a v* tag)
+#
+# Wheels are built with cibuildwheel for CPython 3.8 - 3.13 on:
+#   linux x86_64 / aarch64 (manylinux), macOS x86_64 + arm64, Windows AMD64.
+# cibuildwheel is pinned to the 2.x line because 3.x dropped CPython 3.8.
+# No sdist is published: the package compiles ../../core, so an sdist would not be
+# self-contained — pip install on an unsupported platform fails cleanly instead.
+name: pypi-publish
+
+on:
+  push:
+    branches: ["sdk"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wheels:
+    name: wheels (${{ matrix.id }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: linux-x86_64,  runner: ubuntu-latest,    archs: x86_64 }
+          - { id: linux-aarch64, runner: ubuntu-24.04-arm, archs: aarch64 }
+          - { id: macos,         runner: macos-latest,     archs: "x86_64 arm64" }
+          - { id: windows,       runner: windows-latest,   archs: AMD64 }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Stamp package version
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, re, pathlib
+          ref = os.environ.get("GITHUB_REF", "")
+          run = os.environ.get("GITHUB_RUN_NUMBER", "0")
+          pyproject = pathlib.Path("bindings/python/pyproject.toml")
+          versionpy = pathlib.Path("bindings/python/vietasr/version.py")
+
+          base = re.search(r'(?m)^version\s*=\s*"([^"]+)"', pyproject.read_text()).group(1)
+          base = re.match(r'\d+\.\d+\.\d+', base).group(0)
+
+          if ref.startswith("refs/tags/v"):
+              new = ref[len("refs/tags/v"):]          # v0.2.0 -> 0.2.0
+          elif ref == "refs/heads/sdk":
+              new = f"{base}.dev{run}"                 # 0.1.0  -> 0.1.0.dev42
+          else:
+              new = None
+
+          if new:
+              pyproject.write_text(re.sub(
+                  r'(?m)^(version\s*=\s*")[^"]+(")',
+                  lambda m: m.group(1) + new + m.group(2),
+                  pyproject.read_text()))
+              versionpy.write_text(re.sub(
+                  r'(?m)^(__version__\s*=\s*")[^"]+(")',
+                  lambda m: m.group(1) + new + m.group(2),
+                  versionpy.read_text()))
+              print(f"version -> {new}")
+          else:
+              print(f"version unchanged ({base})")
+          PY
+
+      - name: Build wheels
+        working-directory: bindings/python
+        shell: bash
+        env:
+          CIBW_BUILD_VERBOSITY: "1"
+          CIBW_ARCHS: ${{ matrix.archs }}
+          # Target CPython 3.8 through 3.13.
+          CIBW_BUILD: "cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*"
+          # PyPy is not supported by this cffi setup; musllinux/Alpine is niche.
+          CIBW_SKIP: "pp* *-musllinux*"
+          CIBW_TEST_COMMAND: 'python -c "import vietasr; print(vietasr.__version__)"'
+          CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=11.0"
+          # The package's CMake builds ../../core, which sits outside the package
+          # directory cibuildwheel mounts into the manylinux container. Mount core
+          # and models so /project/../../core and core/../models resolve inside it.
+          CIBW_CONTAINER_ENGINE: >-
+            docker; create_args:
+            --volume=${{ github.workspace }}/core:/core
+            --volume=${{ github.workspace }}/models:/models
+          # Windows runtime DLLs are already bundled next to the lib by CMake.
+          CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: ""
+        run: |
+          python -m pip install --upgrade pip "cibuildwheel>=2.23,<3"
+          python -m cibuildwheel --output-dir "${{ github.workspace }}/wheelhouse"
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.id }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: wheels
+    if: github.ref == 'refs/heads/sdk'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          packages-dir: dist
+          skip-existing: true
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: wheels
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download wheels
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist
