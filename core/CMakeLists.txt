@@ -18,6 +18,9 @@ option(VIETASR_BUILD_SHARED "Build shared library (libvietasr.so/.dylib/.dll)" O
 option(VIETASR_BUILD_STATIC "Build static library (libvietasr.a)" OFF)
 option(VIETASR_BUILD_TESTS  "Build unit tests" ON)
 option(VIETASR_BUILD_EXAMPLES "Build example CLIs" OFF)
+# Consumers that add_subdirectory() this core (e.g. the Python wheel) install
+# libvietasr themselves and turn this OFF to avoid duplicate install rules.
+option(VIETASR_INSTALL "Emit install() rules for libvietasr" ON)
 
 option(VIETASR_BACKEND_ONNX   "Enable ONNX Runtime backend (default: everywhere)" ON)
 option(VIETASR_BACKEND_COREML "Enable CoreML backend (Apple platforms)" OFF)
@@ -243,10 +246,18 @@ if(VIETASR_HAS_ONNXRUNTIME)
 endif()
 
 set_target_properties(vietasr PROPERTIES
-    VERSION ${PROJECT_VERSION}
-    SOVERSION ${PROJECT_VERSION_MAJOR}
     PUBLIC_HEADER "${VIETASR_PUBLIC_HEADERS}"
 )
+
+if(VIETASR_INSTALL)
+    # SONAME versioning matters for a system-installed library. An embedded
+    # build (e.g. the Python wheel) sets VIETASR_INSTALL=OFF and wants a single
+    # unversioned libvietasr.so instead of versioned SONAME symlinks.
+    set_target_properties(vietasr PROPERTIES
+        VERSION ${PROJECT_VERSION}
+        SOVERSION ${PROJECT_VERSION_MAJOR}
+    )
+endif()
 
 if(VIETASR_BUILD_TESTS)
     enable_testing()
@@ -258,14 +269,16 @@ if(VIETASR_BUILD_EXAMPLES)
                      ${CMAKE_BINARY_DIR}/_examples_cli)
 endif()
 
-install(TARGETS vietasr
-    EXPORT vietasrTargets
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+if(VIETASR_INSTALL)
+    install(TARGETS vietasr
+        EXPORT vietasrTargets
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
 
-install(DIRECTORY include/vietasr
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+    install(DIRECTORY include/vietasr
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+endif()
