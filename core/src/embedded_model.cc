@@ -22,7 +22,10 @@ HMODULE SelfModule() {
 
 vietasr::EmbeddedBlob LoadOneResource(HMODULE module, int id) {
     if (!module) return {nullptr, 0};
-    HRSRC info = FindResourceW(module, MAKEINTRESOURCEW(id), RT_RCDATA);
+    // RT_RCDATA expands to the ANSI MAKEINTRESOURCE form (LPSTR); FindResourceW
+    // needs an LPCWSTR. The value is an integer-in-pointer, so reinterpret it.
+    HRSRC info = FindResourceW(module, MAKEINTRESOURCEW(id),
+                               reinterpret_cast<LPCWSTR>(RT_RCDATA));
     if (!info) return {nullptr, 0};
     HGLOBAL handle = LoadResource(module, info);
     if (!handle) return {nullptr, 0};

@@ -5,11 +5,31 @@
 #if VIETASR_HAS_ONNXRUNTIME
 #  include <onnxruntime_cxx_api.h>
 #  include <memory>
+#  include <string>
 #  include <vector>
+#  ifdef _WIN32
+#    define WIN32_LEAN_AND_MEAN
+#    define NOMINMAX
+#    include <windows.h>
+#  endif
 
 namespace vietasr {
 
 namespace {
+
+#ifdef _WIN32
+// onnxruntime's file-path Session constructor takes ORTCHAR_T* — wchar_t on
+// Windows. Convert the UTF-8 model path to UTF-16 so Unicode paths work too.
+std::wstring Utf8ToWide(const std::string& s) {
+    if (s.empty()) return std::wstring();
+    int n = ::MultiByteToWideChar(CP_UTF8, 0, s.data(),
+                                  static_cast<int>(s.size()), nullptr, 0);
+    std::wstring w(static_cast<std::size_t>(n), L'\0');
+    ::MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()),
+                          w.data(), n);
+    return w;
+}
+#endif
 
 class OnnxEngine final : public Engine {
 public:
@@ -23,8 +43,14 @@ public:
 
     Status LoadModel(const std::string& model_path) override {
         try {
+#ifdef _WIN32
+            std::wstring wpath = Utf8ToWide(model_path);
+            session_ = std::make_unique<Ort::Session>(
+                env_, wpath.c_str(), session_options_);
+#else
             session_ = std::make_unique<Ort::Session>(
                 env_, model_path.c_str(), session_options_);
+#endif
         } catch (const Ort::Exception& exc) {
             return Status::Error(-6,
                 std::string("Ort::Session ctor failed: ") + exc.what());
