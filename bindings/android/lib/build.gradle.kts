@@ -38,6 +38,11 @@ android {
             useLegacyPackaging = false
         }
     }
+
+    // Expose the `release` software component for maven-publish below.
+    publishing {
+        singleVariant("release")
+    }
 }
 
 publishing {
