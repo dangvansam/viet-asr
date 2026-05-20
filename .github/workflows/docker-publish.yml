@@ -5,12 +5,14 @@
 #   DOCKERHUB_TOKEN     — a Docker Hub access token (not your password)
 #
 # Triggers:
+#   - push to the sdk branch           -> publishes the `sdk` tag
 #   - push a tag like v0.1.0           -> publishes 0.1.0, 0.1, latest
 #   - run manually (workflow_dispatch) -> publishes the tag you type, or a sha tag
 name: docker-publish
 
 on:
   push:
+    branches: ["sdk"]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -103,6 +105,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=ref,event=branch
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
             type=sha,enable=${{ github.event_name == 'workflow_dispatch' }}
