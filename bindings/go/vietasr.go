@@ -1,13 +1,8 @@
+// Package vietasr is the Go binding for the VietASR Vietnamese speech AI SDK.
+//
+// It is pure Go: the native libvietasr is loaded via purego (no cgo) and
+// downloaded from the matching GitHub Release on first use. See native.go.
 package vietasr
-
-/*
-#cgo CFLAGS: -I${SRCDIR}/../../core/include
-#cgo LDFLAGS: -L${SRCDIR}/_native -lvietasr -Wl,-rpath,${SRCDIR}/_native
-
-#include <stdlib.h>
-#include "vietasr.h"
-*/
-import "C"
 
 import (
 	"encoding/json"
@@ -37,11 +32,11 @@ const (
 )
 
 type Pipeline struct {
-	handle *C.VietasrPipeline
+	handle uintptr
 }
 
 type Session struct {
-	handle *C.VietasrSession
+	handle uintptr
 }
 
 type Result struct {
@@ -98,7 +93,10 @@ func parseResult(raw string) Result {
 }
 
 func lastError() string {
-	return C.GoString(C.vietasr_last_error())
+	if vietasrLastErrorFn == nil {
+		return ""
+	}
+	return goString(vietasrLastErrorFn())
 }
 
 func errorOr(msg string) error {
@@ -110,10 +108,11 @@ func errorOr(msg string) error {
 
 // PipelinePreset constructs a pipeline from a named preset (e.g. "transcribe").
 func PipelinePreset(name string) (*Pipeline, error) {
-	cname := C.CString(name)
-	defer C.free(unsafe.Pointer(cname))
-	handle := C.vietasr_pipeline_preset(cname)
-	if handle == nil {
+	if err := ensureLoaded(); err != nil {
+		return nil, err
+	}
+	handle := vietasrPipelinePreset(name)
+	if handle == 0 {
 		return nil, errorOr(fmt.Sprintf("unknown preset: %s", name))
 	}
 	p := &Pipeline{handle: handle}
@@ -122,25 +121,28 @@ func PipelinePreset(name string) (*Pipeline, error) {
 }
 
 // NewPipeline constructs an empty pipeline for module-by-module composition.
+// If the native library cannot be loaded, the returned pipeline's methods
+// report the load error.
 func NewPipeline() *Pipeline {
-	handle := C.vietasr_pipeline_new()
-	p := &Pipeline{handle: handle}
+	if err := ensureLoaded(); err != nil {
+		return &Pipeline{}
+	}
+	p := &Pipeline{handle: vietasrPipelineNew()}
 	runtime.SetFinalizer(p, func(p *Pipeline) { p.Close() })
 	return p
 }
 
 // Add appends a module to the pipeline. config may be nil for default config.
 func (p *Pipeline) Add(moduleName string, config map[string]interface{}) error {
-	cname := C.CString(moduleName)
-	defer C.free(unsafe.Pointer(cname))
+	if err := ensureLoaded(); err != nil {
+		return err
+	}
 	cfgJSON := "{}"
 	if config != nil {
 		bytes, _ := json.Marshal(config)
 		cfgJSON = string(bytes)
 	}
-	ccfg := C.CString(cfgJSON)
-	defer C.free(unsafe.Pointer(ccfg))
-	status := C.vietasr_pipeline_add_module(p.handle, cname, ccfg)
+	status := vietasrPipelineAddModule(p.handle, moduleName, cfgJSON)
 	if status != 0 {
 		return errorOr(fmt.Sprintf("add module failed: %s (%d)", moduleName, int(status)))
 	}
@@ -148,26 +150,30 @@ func (p *Pipeline) Add(moduleName string, config map[string]interface{}) error {
 }
 
 func (p *Pipeline) SetBackend(b Backend) error {
-	status := C.vietasr_pipeline_set_backend(p.handle, C.VietasrBackend(b))
-	if status != 0 {
+	if err := ensureLoaded(); err != nil {
+		return err
+	}
+	if vietasrPipelineSetBackend(p.handle, int32(b)) != 0 {
 		return errorOr("set backend failed")
 	}
 	return nil
 }
 
 func (p *Pipeline) SetModelDir(dir string) error {
-	cdir := C.CString(dir)
-	defer C.free(unsafe.Pointer(cdir))
-	status := C.vietasr_pipeline_set_model_dir(p.handle, cdir)
-	if status != 0 {
+	if err := ensureLoaded(); err != nil {
+		return err
+	}
+	if vietasrPipelineSetModelDir(p.handle, dir) != 0 {
 		return errorOr("set model dir failed")
 	}
 	return nil
 }
 
 func (p *Pipeline) Build() error {
-	status := C.vietasr_pipeline_build(p.handle)
-	if status != 0 {
+	if err := ensureLoaded(); err != nil {
+		return err
+	}
+	if vietasrPipelineBuild(p.handle) != 0 {
 		return errorOr("build failed")
 	}
 	return nil
@@ -175,36 +181,40 @@ func (p *Pipeline) Build() error {
 
 // TranscribeFile reads a WAV file and returns the transcript.
 func (p *Pipeline) TranscribeFile(wavPath string) (Result, error) {
-	cpath := C.CString(wavPath)
-	defer C.free(unsafe.Pointer(cpath))
-	raw := C.vietasr_transcribe_file(p.handle, cpath)
-	if raw == nil {
+	if err := ensureLoaded(); err != nil {
+		return Result{}, err
+	}
+	raw := vietasrTranscribeFile(p.handle, wavPath)
+	if raw == 0 {
 		return Result{}, errorOr("transcribe_file failed")
 	}
-	return parseResult(C.GoString(raw)), nil
+	return parseResult(goString(raw)), nil
 }
 
 // TranscribeBuffer transcribes raw 16-bit PCM samples at sampleRate.
 func (p *Pipeline) TranscribeBuffer(pcm []int16, sampleRate float32) (Result, error) {
+	if err := ensureLoaded(); err != nil {
+		return Result{}, err
+	}
 	if len(pcm) == 0 {
 		return Result{}, errors.New("empty pcm buffer")
 	}
-	raw := C.vietasr_transcribe_buffer(
-		p.handle,
-		(*C.short)(unsafe.Pointer(&pcm[0])),
-		C.int(len(pcm)),
-		C.float(sampleRate),
-	)
-	if raw == nil {
+	raw := vietasrTranscribeBuffer(
+		p.handle, unsafe.Pointer(&pcm[0]), int32(len(pcm)), sampleRate)
+	runtime.KeepAlive(pcm)
+	if raw == 0 {
 		return Result{}, errorOr("transcribe_buffer failed")
 	}
-	return parseResult(C.GoString(raw)), nil
+	return parseResult(goString(raw)), nil
 }
 
 // Stream returns a Session for incremental audio feeding.
 func (p *Pipeline) Stream(sampleRate float32) (*Session, error) {
-	handle := C.vietasr_session_new(p.handle, C.float(sampleRate))
-	if handle == nil {
+	if err := ensureLoaded(); err != nil {
+		return nil, err
+	}
+	handle := vietasrSessionNew(p.handle, sampleRate)
+	if handle == 0 {
 		return nil, errorOr("session creation failed")
 	}
 	s := &Session{handle: handle}
@@ -213,9 +223,9 @@ func (p *Pipeline) Stream(sampleRate float32) (*Session, error) {
 }
 
 func (p *Pipeline) Close() {
-	if p.handle != nil {
-		C.vietasr_pipeline_free(p.handle)
-		p.handle = nil
+	if p.handle != 0 {
+		vietasrPipelineFree(p.handle)
+		p.handle = 0
 	}
 }
 
@@ -224,11 +234,9 @@ func (s *Session) Accept(pcm []int16) bool {
 	if len(pcm) == 0 {
 		return false
 	}
-	return C.vietasr_accept_waveform_s16(
-		s.handle,
-		(*C.short)(unsafe.Pointer(&pcm[0])),
-		C.int(len(pcm)),
-	) == 1
+	r := vietasrAcceptS16(s.handle, unsafe.Pointer(&pcm[0]), int32(len(pcm)))
+	runtime.KeepAlive(pcm)
+	return r == 1
 }
 
 // AcceptFloat feeds a chunk of float32 PCM in [-1, 1] range.
@@ -236,56 +244,65 @@ func (s *Session) AcceptFloat(pcm []float32) bool {
 	if len(pcm) == 0 {
 		return false
 	}
-	return C.vietasr_accept_waveform_f32(
-		s.handle,
-		(*C.float)(unsafe.Pointer(&pcm[0])),
-		C.int(len(pcm)),
-	) == 1
+	r := vietasrAcceptF32(s.handle, unsafe.Pointer(&pcm[0]), int32(len(pcm)))
+	runtime.KeepAlive(pcm)
+	return r == 1
 }
 
 func (s *Session) Partial() Result {
-	return parseResult(C.GoString(C.vietasr_partial_result(s.handle)))
+	return parseResult(goString(vietasrPartialResult(s.handle)))
 }
 
 func (s *Session) Result() Result {
-	return parseResult(C.GoString(C.vietasr_result(s.handle)))
+	return parseResult(goString(vietasrResultFn(s.handle)))
 }
 
 func (s *Session) Final() Result {
-	return parseResult(C.GoString(C.vietasr_final_result(s.handle)))
+	return parseResult(goString(vietasrFinalResult(s.handle)))
 }
 
 func (s *Session) Reset() {
-	C.vietasr_session_reset(s.handle)
+	vietasrSessionReset(s.handle)
 }
 
 func (s *Session) Close() {
-	if s.handle != nil {
-		C.vietasr_session_free(s.handle)
-		s.handle = nil
+	if s.handle != 0 {
+		vietasrSessionFree(s.handle)
+		s.handle = 0
 	}
 }
 
 // ListModules returns the names of all registered modules.
 func ListModules() []string {
-	raw := C.GoString(C.vietasr_list_modules())
+	if ensureLoaded() != nil {
+		return nil
+	}
 	var modules []string
-	json.Unmarshal([]byte(raw), &modules)
+	json.Unmarshal([]byte(goString(vietasrListModulesFn())), &modules)
 	return modules
 }
 
 // ListPresets returns the names of all registered presets.
 func ListPresets() []string {
-	raw := C.GoString(C.vietasr_list_presets())
+	if ensureLoaded() != nil {
+		return nil
+	}
 	var presets []string
-	json.Unmarshal([]byte(raw), &presets)
+	json.Unmarshal([]byte(goString(vietasrListPresetsFn())), &presets)
 	return presets
 }
 
+// Version returns the native library version, or "" if it cannot be loaded.
 func Version() string {
-	return C.GoString(C.vietasr_version())
+	if ensureLoaded() != nil {
+		return ""
+	}
+	return goString(vietasrVersionFn())
 }
 
 func SetLogLevel(level LogLevel) {
-	C.vietasr_set_log_level(C.VietasrLogLevel(level))
+	if ensureLoaded() != nil {
+		return
+	}
+	vietasrSetLogLevelFn(int32(level))
 }

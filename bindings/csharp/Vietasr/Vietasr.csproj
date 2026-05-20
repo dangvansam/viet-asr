@@ -7,20 +7,16 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
 
-    <PackageId>Vietasr</PackageId>
+    <PackageId>viet-asr</PackageId>
     <Version>0.1.0</Version>
     <Authors>vietasr contributors</Authors>
     <Description>Universal Vietnamese Speech AI SDK — .NET binding</Description>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/dangvansam/vietasr</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/dangvansam/vietasr</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/dangvansam/viet-asr</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dangvansam/viet-asr</RepositoryUrl>
     <PackageTags>asr;speech-recognition;vietnamese;vietasr;offline;onnx</PackageTags>
+    <!-- The ~67 MB native (ONNX model embedded) is downloaded by NativeLoader
+         at first use, not packed into the .nupkg. -->
   </PropertyGroup>
-
-  <ItemGroup>
-    <Content Include="../runtimes/**/*.so" Pack="true" PackagePath="runtimes/" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../runtimes/**/*.dylib" Pack="true" PackagePath="runtimes/" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../runtimes/**/*.dll" Pack="true" PackagePath="runtimes/" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
 
 </Project>

@@ -1,12 +1,18 @@
 [package]
-name = "vietasr"
+name = "viet-asr"
 version = "0.1.0"
 edition = "2021"
 description = "Universal Vietnamese Speech AI SDK — Rust binding"
 license = "Apache-2.0"
 repository = "https://github.com/dangvansam/viet-asr"
+readme = "README.md"
 keywords = ["asr", "speech-recognition", "vietnamese", "onnx", "offline"]
 categories = ["multimedia::audio", "api-bindings"]
+build = "build.rs"
+links = "vietasr"
+# Ship source only — the ~67 MB native is downloaded by build.rs (crates.io
+# has a ~10 MB package limit). `_native/` and `Cargo.lock` are excluded.
+include = ["src/**/*", "examples/**/*", "build.rs", "README.md"]
 
 [lib]
 name = "vietasr"

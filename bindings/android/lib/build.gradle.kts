@@ -21,6 +21,8 @@ android {
 
     sourceSets {
         getByName("main") {
+            // libvietasr.so + libonnxruntime.so are staged here by
+            // build-jnilibs.sh and packaged straight into the AAR.
             jniLibs.srcDirs("src/main/jniLibs")
         }
     }
@@ -41,12 +43,22 @@ android {
 publishing {
     publications {
         register<MavenPublication>("release") {
-            groupId = "io.vietasr"
-            artifactId = "vietasr"
+            groupId = "io.github.dangvansam"
+            artifactId = "viet-asr"
             version = "0.1.0"
 
             afterEvaluate {
                 from(components["release"])
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/dangvansam/viet-asr")
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
             }
         }
     }

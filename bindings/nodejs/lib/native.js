@@ -28,7 +28,11 @@ class NativeLibrary {
                 return dir;
             }
         }
-        return candidates[0];
+        // Not bundled and not a source checkout: download into the per-user
+        // cache (also covers `npm install --ignore-scripts`).
+        const { ensureNative } = require("./native-download");
+        const { version } = require("../package.json");
+        return ensureNative(version);
     }
 
     static libraryFilename() {

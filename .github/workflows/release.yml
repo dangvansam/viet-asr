@@ -1,0 +1,292 @@
+# Build native libraries and publish every non-Python VietASR binding.
+#
+# Setup once — add repository secrets (Settings → Secrets and variables → Actions):
+#   NPM_TOKEN              — npm automation token (https://www.npmjs.com/settings)
+#   CARGO_REGISTRY_TOKEN   — crates.io API token (https://crates.io/settings/tokens)
+#   NUGET_API_KEY          — nuget.org API key (https://www.nuget.org/account/apikeys)
+# GitHub Packages (Java/Android) uses the built-in GITHUB_TOKEN — no secret needed.
+#
+# Triggers:
+#   - push a tag like v0.2.0  -> build natives, cut a Release, publish every binding
+#   - run manually            -> build natives only (publish steps are skipped)
+#
+# The bindings ship small: each one downloads the matching native from this
+# workflow's GitHub Release on install/build/first-run. pypi-publish.yml and
+# docker-publish.yml run independently off the same tag.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version for a manual (non-tag) run"
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Build libvietasr (+ onnxruntime) for every platform ───────────────────
+  build-natives:
+    name: native (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-x64,         runner: ubuntu-latest }
+          - { platform: linux-arm64,       runner: ubuntu-24.04-arm }
+          - { platform: darwin-universal2, runner: macos-latest }
+          - { platform: win-x64,           runner: windows-latest }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install patchelf (Linux)
+        if: startsWith(matrix.platform, 'linux')
+        run: sudo apt-get update && sudo apt-get install -y patchelf
+
+      - name: Configure & build core
+        shell: bash
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "13.3"
+        run: |
+          extra=""
+          if [ "${{ matrix.platform }}" = "darwin-universal2" ]; then
+            extra="-DCMAKE_OSX_ARCHITECTURES=x86_64;arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.3"
+          fi
+          cmake -S core -B build-core \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVIETASR_INSTALL=OFF \
+            -DVIETASR_BUILD_TESTS=OFF \
+            -DVIETASR_BUILD_EXAMPLES=OFF \
+            -DVIETASR_EMBED_MODEL=ON \
+            $extra
+          cmake --build build-core --config Release -j
+
+      - name: Fail on stubbed ONNX backend
+        shell: bash
+        run: |
+          # CMake warns + stubs engine_onnx when no prebuilt onnxruntime exists.
+          test -d build-core/_deps/onnxruntime-src/lib
+
+      - name: Package native bundle
+        shell: bash
+        run: bash scripts/package-natives.sh "${{ matrix.platform }}" build-core dist-natives
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.platform }}
+          path: dist-natives/*.tar.gz
+          if-no-files-found: error
+
+  # ── Cut the GitHub Release and attach the native + model assets ───────────
+  github-release:
+    name: GitHub Release
+    needs: build-natives
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            v="${{ github.event.inputs.version }}"
+            v="${v:-0.0.0-dev}"
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "release version: $v"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          pattern: native-*
+          merge-multiple: true
+
+      - name: Package model
+        run: |
+          ( cd models/vietasr && tar -czf "$GITHUB_WORKSPACE/assets/viet-asr-model.tar.gz" \
+              chunks.json vocab.txt model.onnx.part* )
+          ls -la assets
+
+      - name: Create / update Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          fail_on_unmatched_files: true
+
+  # ── Node.js → npm ─────────────────────────────────────────────────────────
+  publish-npm:
+    name: npm (viet-asr)
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+      - run: python3 scripts/stamp-version.py "${{ needs.github-release.outputs.version }}"
+      - name: Publish
+        if: github.ref_type == 'tag'
+        working-directory: bindings/nodejs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.github-release.outputs.version }}
+        run: |
+          tag=latest; case "$VERSION" in *-*) tag=next;; esac
+          npm publish --access public --tag "$tag"
+
+  # ── Browser / WASM → npm ──────────────────────────────────────────────────
+  publish-npm-web:
+    name: npm (@viet-asr/web)
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+      - uses: mymindstorm/setup-emsdk@v14
+      - run: python3 scripts/stamp-version.py "${{ needs.github-release.outputs.version }}"
+      - name: Build WASM
+        working-directory: bindings/webjs
+        run: bash build-wasm.sh
+      - name: Publish
+        if: github.ref_type == 'tag'
+        working-directory: bindings/webjs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.github-release.outputs.version }}
+        run: |
+          tag=latest; case "$VERSION" in *-*) tag=next;; esac
+          npm publish --access public --tag "$tag"
+
+  # ── Rust → crates.io ──────────────────────────────────────────────────────
+  publish-crates:
+    name: crates.io (viet-asr)
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: python3 scripts/stamp-version.py "${{ needs.github-release.outputs.version }}"
+      - name: Package (dry run)
+        if: github.ref_type != 'tag'
+        working-directory: bindings/rust
+        run: cargo package --allow-dirty --no-verify
+      - name: Publish
+        if: github.ref_type == 'tag'
+        working-directory: bindings/rust
+        run: cargo publish --allow-dirty --token "${{ secrets.CARGO_REGISTRY_TOKEN }}"
+
+  # ── Java → GitHub Packages ────────────────────────────────────────────────
+  publish-maven-java:
+    name: GitHub Packages (Java)
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: python3 scripts/stamp-version.py "${{ needs.github-release.outputs.version }}"
+      - name: Package
+        working-directory: bindings/java
+        run: mvn -B -ntp package
+      - name: Deploy
+        if: github.ref_type == 'tag'
+        working-directory: bindings/java
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mvn -B -ntp deploy
+
+  # ── Android → GitHub Packages ─────────────────────────────────────────────
+  publish-maven-android:
+    name: GitHub Packages (Android)
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Android NDK
+        run: |
+          yes | sdkmanager "ndk;26.3.11579264" >/dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - run: python3 scripts/stamp-version.py "${{ needs.github-release.outputs.version }}"
+      - name: Build jniLibs (libvietasr.so per ABI)
+        run: bash bindings/android/build-jnilibs.sh
+      - name: Assemble AAR
+        working-directory: bindings/android
+        run: gradle :lib:assembleRelease
+      - name: Publish
+        if: github.ref_type == 'tag'
+        working-directory: bindings/android
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gradle :lib:publish
+
+  # ── .NET → nuget.org ──────────────────────────────────────────────────────
+  publish-nuget:
+    name: nuget.org (viet-asr)
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - run: python3 scripts/stamp-version.py "${{ needs.github-release.outputs.version }}"
+      - name: Pack
+        working-directory: bindings/csharp
+        run: dotnet pack Vietasr/Vietasr.csproj -c Release -o nupkg
+      - name: Push
+        if: github.ref_type == 'tag'
+        working-directory: bindings/csharp
+        run: |
+          dotnet nuget push "nupkg/*.nupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --skip-duplicate
+
+  # ── Go → submodule tag (consumed by the Go module proxy) ──────────────────
+  tag-go:
+    name: Go module tag
+    needs: github-release
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Push bindings/go tag
+        run: |
+          gotag="bindings/go/${GITHUB_REF_NAME}"
+          if git rev-parse "$gotag" >/dev/null 2>&1; then
+            echo "$gotag already exists"
+          else
+            git tag "$gotag"
+            git push origin "$gotag"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
