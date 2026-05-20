@@ -11,7 +11,7 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "vietasr",
+    "viet-asr",
     "fastapi>=0.110",
     "uvicorn>=0.27",
     "websockets>=12",
