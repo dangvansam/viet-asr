@@ -49,7 +49,9 @@ publishing {
     publications {
         register<MavenPublication>("release") {
             groupId = "io.github.dangvansam"
-            artifactId = "viet-asr"
+            // Distinct from the JVM binding (io.github.dangvansam:viet-asr) —
+            // an AAR and a JAR cannot share Maven coordinates.
+            artifactId = "viet-asr-android"
             version = "0.1.0"
 
             afterEvaluate {
