@@ -132,7 +132,7 @@ option).
 </details>
 
 <details>
-<summary>🤖 <b>Android</b> — <code>io.github.dangvansam:viet-asr</code></summary>
+<summary>🤖 <b>Android</b> — <code>io.github.dangvansam:viet-asr-android</code></summary>
 
 Gradle, from **GitHub Packages**:
 
@@ -142,7 +142,7 @@ repositories {
     maven { url = uri("https://maven.pkg.github.com/dangvansam/viet-asr") }
 }
 dependencies {
-    implementation("io.github.dangvansam:viet-asr:0.1.0")
+    implementation("io.github.dangvansam:viet-asr-android:0.1.0")
 }
 ```
 
