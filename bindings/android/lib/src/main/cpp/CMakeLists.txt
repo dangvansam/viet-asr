@@ -32,6 +32,9 @@ set(VIETASR_CORE_SOURCES
     "${VIETASR_CORE_DIR}/src/result_builder.cc"
     "${VIETASR_CORE_DIR}/src/module_registry.cc"
     "${VIETASR_CORE_DIR}/src/preset_registry.cc"
+    # Provides EmbeddedAsrVocab()/EmbeddedAsrModel() — stubs here (Android
+    # downloads the model at runtime); without it vietasr.cc fails to link.
+    "${VIETASR_CORE_DIR}/src/embedded_model.cc"
     "${VIETASR_CORE_DIR}/src/engines/engine_factory.cc"
     "${VIETASR_CORE_DIR}/src/engines/engine_onnx.cc"
     "${VIETASR_CORE_DIR}/src/preprocess/feature_pipeline.cc"
