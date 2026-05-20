@@ -1,0 +1,2 @@
+# Bundled model chunks are raw binary — never apply EOL/text normalization.
+models/vietasr/*.part* binary

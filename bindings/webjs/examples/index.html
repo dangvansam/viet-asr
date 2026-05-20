@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VietASR — Browser Demo</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 720px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        h1 { font-size: 1.4rem; }
+        button {
+            font-size: 1rem;
+            padding: 8px 16px;
+            margin-right: 8px;
+        }
+        #status { color: #666; margin: 12px 0; }
+        #transcript {
+            margin-top: 16px;
+            padding: 16px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            min-height: 60px;
+            white-space: pre-wrap;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>VietASR — Offline Vietnamese ASR in the browser</h1>
+    <p>
+        Feature extraction + CTC decoding run in WebAssembly (compiled from the
+        shared C++ core). The streaming Conformer encoder runs via
+        <code>onnxruntime-web</code>. Everything is on-device — no server.
+    </p>
+
+    <input type="file" id="file" accept="audio/wav,audio/*" />
+    <button id="run" disabled>Transcribe</button>
+
+    <p id="status">Loading model…</p>
+    <div id="transcript"></div>
+
+    <script type="module">
+        import { Pipeline } from "../src/index.js";
+
+        const statusEl = document.getElementById("status");
+        const transcriptEl = document.getElementById("transcript");
+        const runBtn = document.getElementById("run");
+        const fileInput = document.getElementById("file");
+
+        let pipeline = null;
+
+        (async () => {
+            try {
+                pipeline = await Pipeline.create();
+                statusEl.textContent = "Model ready. Pick a WAV file.";
+                runBtn.disabled = false;
+            } catch (err) {
+                statusEl.textContent = "Load failed: " + err.message;
+            }
+        })();
+
+        async function decodeAudio(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const ctx = new AudioContext();
+            const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+            const channel = audioBuffer.getChannelData(0);
+            return { pcm: channel, sampleRate: audioBuffer.sampleRate };
+        }
+
+        runBtn.addEventListener("click", async () => {
+            if (!pipeline || !fileInput.files.length) return;
+            statusEl.textContent = "Transcribing…";
+            transcriptEl.textContent = "";
+            try {
+                const { pcm, sampleRate } = await decodeAudio(fileInput.files[0]);
+                const started = performance.now();
+                const text = await pipeline.transcribe(pcm, sampleRate);
+                const elapsed = (performance.now() - started) / 1000;
+                const duration = pcm.length / sampleRate;
+                transcriptEl.textContent = text;
+                statusEl.textContent =
+                    `Done in ${elapsed.toFixed(2)}s (RTF ${(elapsed / duration).toFixed(2)}).`;
+            } catch (err) {
+                statusEl.textContent = "Error: " + err.message;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "module": "vad",
+  "version": "1",
+  "description": "Silero VAD v5 — 32 ms / 16 kHz",
+  "license": "MIT",
+  "sample_rate": 16000,
+  "files": [
+    {
+      "name": "silero_vad.onnx",
+      "url":  "https://cdn.vietasr.io/vad/1/silero_vad.onnx",
+      "md5":  "TODO_REPLACE_WITH_REAL_MD5_AFTER_UPLOAD",
+      "size_bytes": 1762400
+    }
+  ]
+}

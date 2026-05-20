@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vietasr-server"
+version = "0.1.0"
+description = "OpenAI-compatible REST + WebSocket streaming server for VietASR"
+authors = [{name = "vietasr contributors"}]
+license = {text = "Apache-2.0"}
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "vietasr",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "websockets>=12",
+    "python-multipart>=0.0.9",
+    "numpy>=1.21",
+]
+keywords = ["asr", "speech recognition", "vietnamese", "vietasr", "openai", "server"]
+
+[project.scripts]
+vietasr-server = "vietasr_server.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/dangvansam/viet-asr"
+
+[tool.setuptools]
+packages = ["vietasr_server"]

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+
+    <PackageId>Vietasr</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>vietasr contributors</Authors>
+    <Description>Universal Vietnamese Speech AI SDK — .NET binding</Description>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/dangvansam/vietasr</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dangvansam/vietasr</RepositoryUrl>
+    <PackageTags>asr;speech-recognition;vietnamese;vietasr;offline;onnx</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="../runtimes/**/*.so" Pack="true" PackagePath="runtimes/" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../runtimes/**/*.dylib" Pack="true" PackagePath="runtimes/" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../runtimes/**/*.dll" Pack="true" PackagePath="runtimes/" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

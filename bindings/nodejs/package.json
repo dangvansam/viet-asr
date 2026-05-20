@@ -1,0 +1,39 @@
+{
+  "name": "vietasr",
+  "version": "0.1.0",
+  "description": "Universal Vietnamese Speech AI SDK",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "bin": {
+    "vietasr": "./bin/vietasr.js"
+  },
+  "files": [
+    "index.js",
+    "lib/",
+    "bin/",
+    "_native/",
+    "README.md"
+  ],
+  "keywords": [
+    "asr",
+    "speech-recognition",
+    "vietnamese",
+    "vietasr",
+    "offline",
+    "onnx"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/dangvansam/viet-asr",
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "koffi": "^2.10.0"
+  },
+  "scripts": {
+    "test": "node test/smoke.js",
+    "example": "node examples/quickstart.js"
+  }
+}

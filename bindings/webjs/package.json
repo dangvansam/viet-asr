@@ -1,0 +1,34 @@
+{
+  "name": "@vietasr/web",
+  "version": "0.1.0",
+  "description": "Universal Vietnamese Speech AI SDK — WebAssembly / browser binding",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src/",
+    "dist/",
+    "README.md"
+  ],
+  "keywords": [
+    "asr",
+    "speech-recognition",
+    "vietnamese",
+    "vietasr",
+    "webassembly",
+    "wasm",
+    "browser",
+    "onnxruntime-web"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/dangvansam/viet-asr",
+  "scripts": {
+    "build": "bash build-wasm.sh",
+    "test": "node test/wasm_smoke.mjs && node test/e2e.mjs \"$VIETASR_TEST_WAV\""
+  },
+  "dependencies": {
+    "onnxruntime-web": "^1.26.0"
+  }
+}
