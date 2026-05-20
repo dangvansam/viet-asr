@@ -1,3 +1,7 @@
+# Keep annotations lazy so `dict[...]` / `list[...]` generics do not need
+# evaluation at runtime — required to import on Python 3.8.
+from __future__ import annotations
+
 import json
 from typing import Any
 

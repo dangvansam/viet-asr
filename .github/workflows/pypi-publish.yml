@@ -98,7 +98,9 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
           CIBW_TEST_COMMAND: 'python -c "import vietasr; print(vietasr.__version__)"'
-          CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=11.0"
+          # onnxruntime 1.20.1's universal2 dylib has a minimum target of 13.3;
+          # the wheel must be tagged to match or delocate rejects it.
+          MACOSX_DEPLOYMENT_TARGET: "13.3"
           # The package's CMake builds ../../core, which sits outside the package
           # directory cibuildwheel mounts into the manylinux container. Mount core
           # and models so /project/../../core and core/../models resolve inside it.
