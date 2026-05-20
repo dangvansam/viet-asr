@@ -13,9 +13,13 @@ if(NOT DEFINED ANDROID_ABI)
 endif()
 
 set(ORT_LIB_DIR "${ONNXRUNTIME_ROOT}/jni/${ANDROID_ABI}")
-set(ORT_INCLUDE_DIR "${VIETASR_CORE_DIR}/../../onnxruntime-headers")
-if(NOT EXISTS "${ORT_INCLUDE_DIR}/onnxruntime_c_api.h")
-    set(ORT_INCLUDE_DIR "${ONNXRUNTIME_ROOT}/../vietasr/build-core/_deps/onnxruntime-src/include")
+# Default to the headers/ dir inside an extracted onnxruntime-android AAR;
+# overridable with -DORT_INCLUDE_DIR= for other layouts.
+if(NOT ORT_INCLUDE_DIR)
+    set(ORT_INCLUDE_DIR "${ONNXRUNTIME_ROOT}/headers")
+    if(NOT EXISTS "${ORT_INCLUDE_DIR}/onnxruntime_c_api.h")
+        set(ORT_INCLUDE_DIR "${VIETASR_CORE_DIR}/../../onnxruntime-headers")
+    endif()
 endif()
 
 message(STATUS "ABI=${ANDROID_ABI}")

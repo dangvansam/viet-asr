@@ -16,19 +16,30 @@ That's the whole thing. The model ships inside the SDK — nothing to download. 
 
 ## ⚡ Install — one line, any stack
 
-| Language | Install |
-|---|---|
-| 🐍 **Python** | `pip install vietasr` |
-| 🟢 **Node.js** | `npm install vietasr` |
-| 🐹 **Go** | `go get github.com/dangvansam/viet-asr/bindings/go` |
-| 🦀 **Rust** | `cargo add vietasr` |
-| ☕ **Java / Kotlin** | `implementation("io.vietasr:vietasr:0.1.0")` |
-| 🔷 **C# / .NET** | `dotnet add package Vietasr` |
-| 🌐 **Browser** | `npm install @vietasr/web` |
-| 🤖 **Android** | `implementation("io.vietasr:vietasr:0.1.0")` |
-| ⚙️ **C / C++** | link `libvietasr` + `#include <vietasr.h>` |
+Every binding installs two ways — from its **language package registry**, or **directly from this git repo**.
+
+| Language | Package registry | Direct from git |
+|---|---|---|
+| 🐍 **Python** | `pip install viet-asr` | `pip install "git+https://github.com/dangvansam/viet-asr.git#subdirectory=bindings/python"` |
+| 🟢 **Node.js** | `npm install viet-asr` | clone, then `npm install ./bindings/nodejs` |
+| 🐹 **Go** | `go get github.com/dangvansam/viet-asr/bindings/go` | same command — `go get` resolves straight from git |
+| 🦀 **Rust** | `cargo add viet-asr` | `viet-asr = { git = "https://github.com/dangvansam/viet-asr", package = "viet-asr" }` |
+| ☕ **Java / Kotlin** | `io.github.dangvansam:viet-asr:0.1.0` ¹ | JitPack: `com.github.dangvansam:viet-asr:<tag>` |
+| 🔷 **C# / .NET** | `dotnet add package viet-asr` | clone, then `dotnet pack bindings/csharp/Vietasr` |
+| 🌐 **Browser** | `npm install @viet-asr/web` | clone, then `cd bindings/webjs && npm run build` |
+| 🤖 **Android** | `io.github.dangvansam:viet-asr:0.1.0` ¹ | clone, then `bindings/android/build-jnilibs.sh` + `./gradlew :lib:assembleRelease` |
+| ⚙️ **C / C++** | link `libvietasr` + `#include <vietasr.h>` | build `core/` with CMake |
+
+¹ Published to **GitHub Packages** — add the repo to your build:
+`maven { url = uri("https://maven.pkg.github.com/dangvansam/viet-asr") }` with a GitHub
+token. No-auth alternative: the JitPack coordinate in the right column.
 
 Every binding wraps the **same C++ core** and produces **byte-identical transcripts**. Pick your language — the API is the same everywhere.
+
+> The platform native library (with the model baked in) is fetched once from the
+> matching [GitHub Release](https://github.com/dangvansam/viet-asr/releases) on
+> install or first use, then cached under `~/.cache/viet-asr/`. Set
+> `VIETASR_NATIVE_DIR` to point at a local build instead.
 
 ---
 

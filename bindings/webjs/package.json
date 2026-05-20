@@ -1,5 +1,5 @@
 {
-  "name": "@vietasr/web",
+  "name": "@viet-asr/web",
   "version": "0.1.0",
   "description": "Universal Vietnamese Speech AI SDK — WebAssembly / browser binding",
   "type": "module",
@@ -24,6 +24,14 @@
   ],
   "license": "Apache-2.0",
   "homepage": "https://github.com/dangvansam/viet-asr",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dangvansam/viet-asr.git",
+    "directory": "bindings/webjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "bash build-wasm.sh",
     "test": "node test/wasm_smoke.mjs && node test/e2e.mjs \"$VIETASR_TEST_WAV\""

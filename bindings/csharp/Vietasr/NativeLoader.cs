@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace Vietasr
@@ -72,6 +73,125 @@ namespace Vietasr
             {
                 yield return asmDir;
                 yield return Path.Combine(asmDir, RuntimeRelativePath());
+            }
+
+            // Not bundled: download the native (~67 MB) into the per-user cache.
+            string? cache = EnsureCacheDir();
+            if (!string.IsNullOrEmpty(cache))
+            {
+                yield return cache;
+            }
+        }
+
+        private static string? cacheDir;
+
+        // Downloads + extracts the platform native bundle from the matching
+        // GitHub Release into ~/.cache/viet-asr/<version>/.
+        private static string? EnsureCacheDir()
+        {
+            if (cacheDir != null)
+            {
+                return cacheDir;
+            }
+            string version = Version();
+            string dir = Path.Combine(CacheRoot(), "viet-asr", version);
+            string lib = Path.Combine(dir, LibraryFileName("vietasr"));
+            if (File.Exists(lib))
+            {
+                cacheDir = dir;
+                return dir;
+            }
+            try
+            {
+                Directory.CreateDirectory(dir);
+                string asset = $"viet-asr-native-{PlatformKey()}.tar.gz";
+                string tarball = Path.Combine(dir, asset);
+                string[] urls =
+                {
+                    $"https://github.com/dangvansam/viet-asr/releases/download/v{version}/{asset}",
+                    $"https://github.com/dangvansam/viet-asr/releases/latest/download/{asset}",
+                };
+                foreach (string url in urls)
+                {
+                    if (Run("curl", "-fSL", "--retry", "3", "-o", tarball, url)
+                        && Run("tar", "-xzf", tarball, "-C", dir)
+                        && File.Exists(lib))
+                    {
+                        File.Delete(tarball);
+                        cacheDir = dir;
+                        return dir;
+                    }
+                }
+            }
+            catch
+            {
+                // fall through — Resolve reports the failure
+            }
+            return null;
+        }
+
+        private static string Version()
+        {
+            string version = typeof(NativeLoader).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                ?.InformationalVersion ?? "";
+            int plus = version.IndexOf('+');
+            if (plus >= 0)
+            {
+                version = version.Substring(0, plus);
+            }
+            return string.IsNullOrEmpty(version) ? "latest" : version;
+        }
+
+        private static string PlatformKey()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return "win-x64";
+            }
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                return "darwin-universal2";
+            }
+            return RuntimeInformation.ProcessArchitecture == Architecture.Arm64
+                ? "linux-arm64" : "linux-x64";
+        }
+
+        private static string CacheRoot()
+        {
+            string? xdg = Environment.GetEnvironmentVariable("XDG_CACHE_HOME");
+            if (!string.IsNullOrEmpty(xdg))
+            {
+                return xdg;
+            }
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".cache");
+        }
+
+        private static bool Run(string file, params string[] args)
+        {
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo(file)
+                {
+                    UseShellExecute = false,
+                };
+                foreach (string arg in args)
+                {
+                    psi.ArgumentList.Add(arg);
+                }
+                using var proc = System.Diagnostics.Process.Start(psi);
+                if (proc == null)
+                {
+                    return false;
+                }
+                proc.WaitForExit();
+                return proc.ExitCode == 0;
+            }
+            catch
+            {
+                return false;
             }
         }
 

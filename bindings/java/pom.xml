@@ -5,12 +5,12 @@
                              http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.vietasr</groupId>
-    <artifactId>vietasr</artifactId>
+    <groupId>io.github.dangvansam</groupId>
+    <artifactId>viet-asr</artifactId>
     <version>0.1.0</version>
     <packaging>jar</packaging>
 
-    <name>vietasr</name>
+    <name>viet-asr</name>
     <description>Universal Vietnamese Speech AI SDK — JVM desktop binding</description>
     <url>https://github.com/dangvansam/viet-asr</url>
 
@@ -20,6 +20,12 @@
             <url>https://www.apache.org/licenses/LICENSE-2.0</url>
         </license>
     </licenses>
+
+    <scm>
+        <connection>scm:git:https://github.com/dangvansam/viet-asr.git</connection>
+        <developerConnection>scm:git:https://github.com/dangvansam/viet-asr.git</developerConnection>
+        <url>https://github.com/dangvansam/viet-asr</url>
+    </scm>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
@@ -35,17 +41,33 @@
         </dependency>
     </dependencies>
 
+    <!-- The ~67 MB native is downloaded by NativeLibrary at first use, not
+         packed into the JAR. Publishes to GitHub Packages. -->
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/dangvansam/viet-asr</url>
+        </repository>
+    </distributionManagement>
+
     <build>
         <sourceDirectory>src/main/java</sourceDirectory>
-        <resources>
-            <resource>
-                <directory>_native</directory>
-                <includes>
-                    <include>**/*.so</include>
-                    <include>**/*.dylib</include>
-                    <include>**/*.dll</include>
-                </includes>
-            </resource>
-        </resources>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.1</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <!-- Implementation-Version lets NativeLibrary pick
+                                 the matching GitHub Release at runtime. -->
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
     </build>
 </project>

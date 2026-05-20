@@ -3,7 +3,7 @@ requires = ["scikit-build-core>=0.10"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "vietasr"
+name = "viet-asr"
 version = "0.1.0"
 description = "Universal Vietnamese Speech AI SDK"
 authors = [{name = "vietasr contributors"}]

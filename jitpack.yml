@@ -1,0 +1,9 @@
+# Lets JitPack build the JVM binding straight from a git tag, so it can be
+# installed without GitHub Packages auth:
+#   repositories { maven { url = uri("https://jitpack.io") } }
+#   implementation("com.github.dangvansam:viet-asr:<tag>")
+# The ~67 MB native is still downloaded by NativeLibrary at first use.
+jdk:
+  - openjdk17
+install:
+  - cd bindings/java && mvn --batch-mode --no-transfer-progress install -DskipTests

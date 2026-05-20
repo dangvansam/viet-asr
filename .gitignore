@@ -57,3 +57,11 @@ bindings/csharp/**/obj/
 bindings/go/*-bin
 bindings/c/quickstart
 bindings/c/streaming
+
+# release / publish build artifacts
+bindings/*/_native/
+bindings/android/.ort-android/
+bindings/android/.build-*/
+nupkg/
+wheelhouse/
+dist-natives/

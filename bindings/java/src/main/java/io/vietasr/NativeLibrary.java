@@ -5,6 +5,7 @@ import com.sun.jna.Native;
 import com.sun.jna.Pointer;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -45,11 +46,17 @@ interface VietasrNative extends Library {
 final class NativeLibrary {
     static final VietasrNative INSTANCE = load();
 
+    private static final String REPO = "dangvansam/viet-asr";
+
     private NativeLibrary() {
     }
 
     private static VietasrNative load() {
         String dir = resolveNativeDirectory();
+        if (dir == null) {
+            // Not bundled and not a source checkout: download into the cache.
+            dir = downloadNativeDirectory();
+        }
         if (dir != null) {
             preloadSiblings(dir);
             File lib = new File(dir, libraryFilename());
@@ -58,6 +65,70 @@ final class NativeLibrary {
             }
         }
         return Native.load("vietasr", VietasrNative.class);
+    }
+
+    /**
+     * Downloads the platform native bundle (~67 MB, ONNX model embedded) from
+     * the matching GitHub Release into the per-user cache. The JAR ships small.
+     */
+    private static String downloadNativeDirectory() {
+        String version = version();
+        Path cache = Paths.get(cacheRoot(), "viet-asr", version);
+        File lib = new File(cache.toFile(), libraryFilename());
+        if (lib.exists()) {
+            return cache.toString();
+        }
+        try {
+            Files.createDirectories(cache);
+        } catch (Exception e) {
+            return null;
+        }
+        String asset = "viet-asr-native-" + platformKey() + ".tar.gz";
+        File tarball = new File(cache.toFile(), asset);
+        String[] urls = {
+            "https://github.com/" + REPO + "/releases/download/v" + version + "/" + asset,
+            "https://github.com/" + REPO + "/releases/latest/download/" + asset,
+        };
+        for (String url : urls) {
+            if (run("curl", "-fSL", "--retry", "3", "-o", tarball.getAbsolutePath(), url)
+                    && run("tar", "-xzf", tarball.getAbsolutePath(), "-C", cache.toString())
+                    && lib.exists()) {
+                tarball.delete();
+                return cache.toString();
+            }
+        }
+        return null;
+    }
+
+    private static String version() {
+        Package pkg = NativeLibrary.class.getPackage();
+        String v = (pkg != null) ? pkg.getImplementationVersion() : null;
+        return (v != null && !v.isEmpty()) ? v : "latest";
+    }
+
+    private static String platformKey() {
+        String os = System.getProperty("os.name").toLowerCase();
+        String arch = System.getProperty("os.arch").toLowerCase();
+        if (os.contains("win")) return "win-x64";
+        if (os.contains("mac")) return "darwin-universal2";
+        boolean arm = arch.contains("aarch64") || arch.contains("arm");
+        return arm ? "linux-arm64" : "linux-x64";
+    }
+
+    private static String cacheRoot() {
+        String xdg = System.getenv("XDG_CACHE_HOME");
+        if (xdg != null && !xdg.isEmpty()) {
+            return xdg;
+        }
+        return Paths.get(System.getProperty("user.home"), ".cache").toString();
+    }
+
+    private static boolean run(String... cmd) {
+        try {
+            return new ProcessBuilder(cmd).inheritIO().start().waitFor() == 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static String resolveNativeDirectory() {
