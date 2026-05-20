@@ -28,7 +28,7 @@ The browser binding splits the pipeline across two runtimes:
 
 The model ships **inside this package** — `model.onnx` is committed to the repo
 as <50 MB chunks and bundled under `dist/model/`. `Pipeline.create()`
-reassembles them at load time. No network fetch, no HuggingFace dependency.
+reassembles them at load time. No network fetch.
 
 The WASM module is compiled from the **exact same C++** as the desktop/mobile
 bindings (`FeaturePipeline`, `CtcBeamSearch`, `PostProcessor`, `Units`,

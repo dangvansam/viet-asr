@@ -1,12 +1,12 @@
+name: viet-asr
 services:
-  vietasr-server:
+  server:
+    image: viet-asr:latest
     build:
       context: .
       dockerfile: server/Dockerfile
-    image: vietasr-server:latest
-    container_name: vietasr-server
     ports:
-      - "${VIETASR_PORT:-8000}:8000"
+      - 8000:8000
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

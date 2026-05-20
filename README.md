@@ -1,6 +1,6 @@
 # VietASR
 
-### Offline Vietnamese speech-to-text. One model. Nine languages. Zero config.
+### Offline Vietnamese speech-to-text. One model. Nine language bindings. Zero config.
 
 Drop it in, write **three lines**, get a transcript. No API keys, no cloud, no network — the model runs **on-device**, everywhere from a Raspberry Pi to a browser tab.
 
@@ -99,7 +99,7 @@ One JSON result, optional fields — a field appears only if its module ran:
 | Streaming / live | partial | ❌ batch only | ✅ true streaming |
 | Cost per hour | 💰💰💰 | free | **free** |
 | Privacy (audio leaves device) | ❌ | ✅ | ✅ |
-| Model size | — | 0.5–3 GB | **67 MB** |
+| Model size | — | 0.5–3 GB | **66 MB** |
 | Vietnamese tuned | generic | generic | **purpose-built** |
 | Runs in a browser | ❌ | hard | ✅ WASM |
 | Languages / bindings | SDK-limited | Python-first | **9 bindings** |
@@ -125,7 +125,7 @@ Built on a **streaming Conformer + CTC** architecture — the kind that powers r
 
 **RTF** = real-time factor (lower = faster). RTF 0.12 means 10 s of audio transcribes in 1.2 s. Streaming latency: a partial caption every ~320 ms.
 
-Model: **67 MB**, int8-quantized, 4972-token Vietnamese BPE vocab. Fits in memory on a phone.
+Model: **66 MB**, int8-quantized, 4972-token Vietnamese BPE vocab. Fits in memory on a phone.
 
 ---
 
