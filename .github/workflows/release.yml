@@ -43,10 +43,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { platform: linux-x64,         runner: ubuntu-latest }
-          - { platform: linux-arm64,       runner: ubuntu-24.04-arm }
-          - { platform: darwin-universal2, runner: macos-latest }
-          - { platform: win-x64,           runner: windows-latest }
+          - { platform: linux-x64,         runner: ubuntu-latest,    variant: cpu }
+          - { platform: linux-arm64,       runner: ubuntu-24.04-arm, variant: cpu }
+          - { platform: darwin-universal2, runner: macos-latest,     variant: cpu }
+          - { platform: win-x64,           runner: windows-latest,   variant: cpu }
+          - { platform: win-arm64,         runner: windows-11-arm,   variant: cpu }
+          # Opt-in GPU variants — large artifacts, never the default install.
+          - { platform: linux-x64-gpu,     runner: ubuntu-latest,    variant: cuda }
+          - { platform: win-x64-gpu,       runner: windows-latest,   variant: cuda }
+          - { platform: win-x64-directml,  runner: windows-latest,   variant: directml }
     steps:
       - uses: actions/checkout@v4
 
@@ -69,14 +74,17 @@ jobs:
             -DVIETASR_BUILD_TESTS=OFF \
             -DVIETASR_BUILD_EXAMPLES=OFF \
             -DVIETASR_EMBED_MODEL=ON \
+            -DVIETASR_ONNX_VARIANT=${{ matrix.variant }} \
             $extra
           cmake --build build-core --config Release -j
 
       - name: Fail on stubbed ONNX backend
         shell: bash
         run: |
-          # CMake warns + stubs engine_onnx when no prebuilt onnxruntime exists.
-          test -d build-core/_deps/onnxruntime-src/lib
+          # CMake sets VIETASR_HAS_ONNXRUNTIME only when a prebuilt runtime was
+          # located; without it engine_onnx compiles to a no-op stub. This check
+          # is variant-agnostic (CPU/CUDA tarball vs DirectML NuGet layout).
+          grep -q 'VIETASR_HAS_ONNXRUNTIME:INTERNAL=1' build-core/CMakeCache.txt
 
       - name: Package native bundle
         shell: bash
@@ -251,6 +259,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gradle :lib:publish
+
+  # ── iOS → VietASR.xcframework attached to the GitHub Release ──────────────
+  publish-ios:
+    name: iOS xcframework
+    needs: github-release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build VietASR.xcframework
+        run: bash bindings/ios/build-xcframework.sh
+      - name: Zip + SwiftPM checksum
+        working-directory: bindings/ios
+        run: |
+          zip -ry VietASR.xcframework.zip VietASR.xcframework
+          # SwiftPM's binaryTarget checksum is the SHA-256 of the zip. Surface it
+          # so Package.swift can be updated for the tagged release.
+          sum="$(shasum -a 256 VietASR.xcframework.zip | cut -d' ' -f1)"
+          echo "VietASR.xcframework.zip SwiftPM checksum: $sum" >> "$GITHUB_STEP_SUMMARY"
+      - name: Attach to release
+        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.github-release.outputs.version }}
+          files: bindings/ios/VietASR.xcframework.zip
 
   # ── .NET → nuget.org ──────────────────────────────────────────────────────
   publish-nuget:
