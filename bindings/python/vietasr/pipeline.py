@@ -45,6 +45,40 @@ class Pipeline:
             raise PipelineError(self.last_error() or f"set_backend({backend}) failed")
         return self
 
+    _EP_ENUM = {
+        "auto": 0, "cpu": 1, "cuda": 2, "tensorrt": 3, "coreml": 4,
+        "nnapi": 5, "xnnpack": 6, "directml": 7, "qnn": 8,
+    }
+
+    def set_execution_provider(self, provider: str, device_id: int = 0) -> "Pipeline":
+        """Select the ONNX Runtime execution provider. "auto" probes the best
+        provider available on the device and falls back to CPU; an explicit
+        provider still falls back to CPU when it is unavailable."""
+        try:
+            ep = self._EP_ENUM[provider.lower()]
+        except KeyError:
+            raise PipelineError(
+                f"unknown execution provider {provider!r}; expected one of "
+                + ", ".join(sorted(self._EP_ENUM))
+            )
+        status = native.lib.vietasr_pipeline_set_execution_provider(
+            self.handle, ep, device_id
+        )
+        if status != 0:
+            raise PipelineError(
+                self.last_error() or f"set_execution_provider({provider}) failed"
+            )
+        return self
+
+    @staticmethod
+    def available_execution_providers() -> list:
+        """ONNX Runtime execution providers compiled into the loaded native
+        library, by canonical name (e.g. "CPUExecutionProvider")."""
+        raw = native.lib.vietasr_available_execution_providers()
+        if raw == native.ffi.NULL:
+            return []
+        return json.loads(native.ffi.string(raw).decode("utf-8"))
+
     def set_model_dir(self, model_dir: Union[str, Path]) -> "Pipeline":
         status = native.lib.vietasr_pipeline_set_model_dir(
             self.handle, str(model_dir).encode("utf-8")

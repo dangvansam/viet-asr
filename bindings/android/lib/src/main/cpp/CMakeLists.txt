@@ -72,7 +72,16 @@ target_include_directories(vietasr PRIVATE
 target_compile_definitions(vietasr PRIVATE
     VIETASR_BACKEND_ONNX_ENABLED=1
     VIETASR_HAS_ONNXRUNTIME=1
+    # onnxruntime-android bundles the XNNPACK EP (generic registration, no extra
+    # header) and the NNAPI EP (enabled below when its factory header is found).
+    VIETASR_EP_XNNPACK_AVAILABLE=1
 )
+if(EXISTS "${ORT_INCLUDE_DIR}/nnapi_provider_factory.h")
+    target_compile_definitions(vietasr PRIVATE VIETASR_EP_NNAPI_AVAILABLE=1)
+    message(STATUS "vietasr: NNAPI execution provider available")
+else()
+    message(STATUS "vietasr: nnapi_provider_factory.h not found; NNAPI disabled")
+endif()
 target_compile_options(vietasr PRIVATE
     -Wall -Wextra -fvisibility=hidden -O2
 )

@@ -221,18 +221,37 @@ func isReleaseVersion(v string) bool {
 	return v != "" && v != "(devel)" && strings.HasPrefix(v, "v")
 }
 
+// platformKey maps the host + optional VIETASR_ONNX_VARIANT (cuda|directml) to
+// the native bundle key. GPU bundles exist only for linux-x64 / win-x64.
 func platformKey() string {
+	var base string
 	switch runtime.GOOS {
 	case "windows":
-		return "win-x64"
+		if runtime.GOARCH == "arm64" {
+			base = "win-arm64"
+		} else {
+			base = "win-x64"
+		}
 	case "darwin":
-		return "darwin-universal2"
+		base = "darwin-universal2"
 	default:
 		if runtime.GOARCH == "arm64" {
-			return "linux-arm64"
+			base = "linux-arm64"
+		} else {
+			base = "linux-x64"
 		}
-		return "linux-x64"
 	}
+	switch strings.ToLower(os.Getenv("VIETASR_ONNX_VARIANT")) {
+	case "cuda":
+		if base == "linux-x64" || base == "win-x64" {
+			return base + "-gpu"
+		}
+	case "directml":
+		if base == "win-x64" {
+			return "win-x64-directml"
+		}
+	}
+	return base
 }
 
 func libName(stem string) string {

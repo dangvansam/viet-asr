@@ -12,12 +12,18 @@ use std::process::Command;
 
 const REPO: &str = "dangvansam/viet-asr";
 
-fn platform_key() -> &'static str {
+// Maps the build target + optional VIETASR_ONNX_VARIANT (cuda|directml) to the
+// native bundle key. GPU bundles exist only for linux-x64 / win-x64.
+fn platform_key() -> String {
     let target = env::var("TARGET").unwrap_or_default();
-    if target.contains("apple-darwin") {
+    let base = if target.contains("apple-darwin") {
         "darwin-universal2"
     } else if target.contains("windows") {
-        "win-x64"
+        if target.starts_with("aarch64") || target.starts_with("arm") {
+            "win-arm64"
+        } else {
+            "win-x64"
+        }
     } else if target.contains("linux") {
         if target.starts_with("aarch64") || target.starts_with("arm") {
             "linux-arm64"
@@ -26,6 +32,15 @@ fn platform_key() -> &'static str {
         }
     } else {
         panic!("viet-asr: unsupported target '{target}'");
+    };
+    match env::var("VIETASR_ONNX_VARIANT")
+        .unwrap_or_default()
+        .to_lowercase()
+        .as_str()
+    {
+        "cuda" if base == "linux-x64" || base == "win-x64" => format!("{base}-gpu"),
+        "directml" if base == "win-x64" => "win-x64-directml".to_string(),
+        _ => base.to_string(),
     }
 }
 
@@ -96,4 +111,5 @@ fn main() {
     }
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-env-changed=VIETASR_NATIVE_DIR");
+    println!("cargo:rerun-if-env-changed=VIETASR_ONNX_VARIANT");
 }

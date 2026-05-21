@@ -143,18 +143,37 @@ namespace Vietasr
             return string.IsNullOrEmpty(version) ? "latest" : version;
         }
 
+        // Maps the host + optional VIETASR_ONNX_VARIANT (cuda|directml) to the
+        // native bundle key. GPU bundles exist only for linux-x64 / win-x64.
         private static string PlatformKey()
         {
+            string baseKey;
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                return "win-x64";
+                baseKey = RuntimeInformation.ProcessArchitecture == Architecture.Arm64
+                    ? "win-arm64" : "win-x64";
             }
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                return "darwin-universal2";
+                baseKey = "darwin-universal2";
             }
-            return RuntimeInformation.ProcessArchitecture == Architecture.Arm64
-                ? "linux-arm64" : "linux-x64";
+            else
+            {
+                baseKey = RuntimeInformation.ProcessArchitecture == Architecture.Arm64
+                    ? "linux-arm64" : "linux-x64";
+            }
+
+            string variant = (Environment.GetEnvironmentVariable("VIETASR_ONNX_VARIANT")
+                ?? "cpu").ToLowerInvariant();
+            if (variant == "cuda" && (baseKey == "linux-x64" || baseKey == "win-x64"))
+            {
+                return baseKey + "-gpu";
+            }
+            if (variant == "directml" && baseKey == "win-x64")
+            {
+                return "win-x64-directml";
+            }
+            return baseKey;
         }
 
         private static string CacheRoot()

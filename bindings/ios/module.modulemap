@@ -1,0 +1,6 @@
+// Clang module for the VietASR C ABI, embedded in VietASR.xcframework so the
+// SwiftPM `VietASR` target can `import CVietASR` and call vietasr_* directly.
+module CVietASR {
+    header "vietasr.h"
+    export *
+}

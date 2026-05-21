@@ -43,6 +43,14 @@ class Session:
     def final(self) -> Result:
         return Result.from_json(self.ffi.string(native.lib.vietasr_final_result(self.handle)).decode("utf-8"))
 
+    def active_execution_provider(self) -> str:
+        """Canonical name of the execution provider this session runs on
+        (e.g. "CUDAExecutionProvider", "CPUExecutionProvider")."""
+        raw = native.lib.vietasr_active_execution_provider(self.handle)
+        if raw == self.ffi.NULL:
+            return ""
+        return self.ffi.string(raw).decode("utf-8")
+
     def close(self) -> None:
         if self.handle:
             native.lib.vietasr_session_free(self.handle)

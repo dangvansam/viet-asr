@@ -11,16 +11,30 @@ const { execFileSync } = require("child_process");
 
 const REPO = "dangvansam/viet-asr";
 
+// Maps the host + optional VIETASR_ONNX_VARIANT (cuda|directml) to the native
+// bundle key. GPU bundles exist only for linux-x64 / win-x64.
 function platformKey() {
-    if (process.platform === "win32") return "win-x64";
-    if (process.platform === "darwin") return "darwin-universal2";
-    if (process.platform === "linux") {
-        if (process.arch === "x64") return "linux-x64";
-        if (process.arch === "arm64") return "linux-arm64";
+    let base;
+    if (process.platform === "win32") {
+        base = process.arch === "arm64" ? "win-arm64" : "win-x64";
+    } else if (process.platform === "darwin") base = "darwin-universal2";
+    else if (process.platform === "linux") {
+        if (process.arch === "x64") base = "linux-x64";
+        else if (process.arch === "arm64") base = "linux-arm64";
     }
-    throw new Error(
-        `viet-asr: unsupported platform ${process.platform}/${process.arch}`
-    );
+    if (!base) {
+        throw new Error(
+            `viet-asr: unsupported platform ${process.platform}/${process.arch}`
+        );
+    }
+    const variant = (process.env.VIETASR_ONNX_VARIANT || "cpu").toLowerCase();
+    if (variant === "cuda" && (base === "linux-x64" || base === "win-x64")) {
+        return `${base}-gpu`;
+    }
+    if (variant === "directml" && base === "win-x64") {
+        return "win-x64-directml";
+    }
+    return base;
 }
 
 function libFileName() {

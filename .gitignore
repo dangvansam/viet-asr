@@ -62,6 +62,11 @@ bindings/c/streaming
 bindings/*/_native/
 bindings/android/.ort-android/
 bindings/android/.build-*/
+bindings/ios/.ort-ios/
+bindings/ios/.build-ios/
+bindings/ios/VietASR.xcframework/
+bindings/ios/VietASR.xcframework.zip
+bindings/swift/.build/
 nupkg/
 wheelhouse/
 dist-natives/
