@@ -25,6 +25,7 @@ public:
 
     Status AddModule(const std::string& name, const std::string& json_config);
     Status SetBackend(int backend_enum);
+    Status SetExecutionProvider(int ep_enum, int device_id);
     Status SetModelDir(const std::string& model_dir);
 
     Status Build();
@@ -59,6 +60,9 @@ public:
     std::string Partial();
     std::string Result();
     std::string Final();
+
+    // Canonical name of the execution provider this session runs on.
+    std::string ActiveProvider() const;
 
 private:
     class Impl;

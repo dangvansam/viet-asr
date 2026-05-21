@@ -23,6 +23,7 @@ public:
     std::unique_ptr<Engine> engine;
     std::unique_ptr<ModelManager> models;
     int backend{0};
+    EpPreference ep{};
     std::string model_dir;
     bool built{false};
     std::mutex drive_mutex;
@@ -101,6 +102,12 @@ Status Pipeline::SetBackend(int backend_enum) {
     return Status::Ok();
 }
 
+Status Pipeline::SetExecutionProvider(int ep_enum, int device_id) {
+    impl_->ep.ep_enum = ep_enum;
+    impl_->ep.device_id = device_id;
+    return Status::Ok();
+}
+
 Status Pipeline::SetModelDir(const std::string& model_dir) {
     impl_->model_dir = model_dir;
     impl_->models->SetCacheDir(model_dir);
@@ -124,7 +131,7 @@ Status Pipeline::EnsureModels() {
 }
 
 Status Pipeline::Build() {
-    impl_->engine = EngineFactory::Create(impl_->backend);
+    impl_->engine = EngineFactory::Create(impl_->backend, impl_->ep);
     EnsureModels();
 
     ModuleConfig config;
@@ -324,6 +331,13 @@ std::string Session::Final() {
         impl_->finalized = true;
     }
     return impl_->builder.FinalJson();
+}
+
+std::string Session::ActiveProvider() const {
+    if (impl_->pipeline && impl_->pipeline->engine) {
+        return impl_->pipeline->engine->active_provider();
+    }
+    return "";
 }
 
 }

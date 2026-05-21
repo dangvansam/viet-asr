@@ -87,3 +87,55 @@ TEST(Session, StreamingFinalJson) {
     vietasr_session_free(session);
     vietasr_pipeline_free(pipeline);
 }
+
+TEST(ExecutionProvider, AvailableProvidersIncludeCpu) {
+    // ONNX Runtime always ships the CPU provider, whatever the build variant.
+    std::string providers = vietasr_available_execution_providers();
+    EXPECT_TRUE(Contains(providers, "CPUExecutionProvider"));
+}
+
+TEST(ExecutionProvider, AutoSelectionResolvesToCpuOnPlainBuild) {
+    VietasrPipeline* pipeline = vietasr_pipeline_preset("transcribe");
+    ASSERT_NE(pipeline, nullptr);
+    VietasrSession* session = vietasr_session_new(pipeline, 16000.0f);
+    ASSERT_NE(session, nullptr);
+    // A CPU-only ONNX Runtime build has no accelerator to auto-detect.
+    EXPECT_STREQ(vietasr_active_execution_provider(session),
+                 "CPUExecutionProvider");
+    vietasr_session_free(session);
+    vietasr_pipeline_free(pipeline);
+}
+
+TEST(ExecutionProvider, UnavailableProviderFallsBackAndStillTranscribes) {
+    VietasrPipeline* pipeline = vietasr_pipeline_new();
+    ASSERT_NE(pipeline, nullptr);
+    ASSERT_EQ(vietasr_pipeline_add_module(pipeline, "vietasr", "{}"), VIETASR_OK);
+    // CUDA is not compiled into the default (CPU) ONNX Runtime build; the
+    // request must fall back to CPU rather than fail.
+    EXPECT_EQ(vietasr_pipeline_set_execution_provider(pipeline,
+                                                      VIETASR_EP_CUDA, 0),
+              VIETASR_OK);
+    ASSERT_EQ(vietasr_pipeline_build(pipeline), VIETASR_OK);
+
+    VietasrSession* session = vietasr_session_new(pipeline, 16000.0f);
+    ASSERT_NE(session, nullptr);
+    EXPECT_STREQ(vietasr_active_execution_provider(session),
+                 "CPUExecutionProvider");
+
+    short pcm[16000] = {0};
+    for (int i = 0; i < 16000; ++i) {
+        pcm[i] = static_cast<short>((i % 2000) - 1000);
+    }
+    vietasr_accept_waveform_s16(session, pcm, 16000);
+    std::string final = vietasr_final_result(session);
+    EXPECT_TRUE(Contains(final, "is_final"));
+
+    vietasr_session_free(session);
+    vietasr_pipeline_free(pipeline);
+}
+
+TEST(ExecutionProvider, SetExecutionProviderRejectsNullPipeline) {
+    EXPECT_EQ(vietasr_pipeline_set_execution_provider(nullptr,
+                                                      VIETASR_EP_AUTO, 0),
+              VIETASR_ERR_INVALID_ARG);
+}

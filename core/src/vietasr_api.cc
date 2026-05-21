@@ -74,6 +74,14 @@ VietasrStatus vietasr_pipeline_set_backend(VietasrPipeline* pipeline,
     return VIETASR_OK;
 }
 
+VietasrStatus vietasr_pipeline_set_execution_provider(VietasrPipeline* pipeline,
+                                                      VietasrExecutionProvider ep,
+                                                      int device_id) {
+    if (!pipeline) return VIETASR_ERR_INVALID_ARG;
+    ToCxx(pipeline)->SetExecutionProvider(static_cast<int>(ep), device_id);
+    return VIETASR_OK;
+}
+
 VietasrStatus vietasr_pipeline_set_model_dir(VietasrPipeline* pipeline,
                                              const char* model_dir) {
     if (!pipeline || !model_dir) return VIETASR_ERR_INVALID_ARG;
@@ -109,6 +117,16 @@ const char* vietasr_list_presets(void) {
     ::vietasr::JsonWriter writer;
     writer.BeginArray();
     for (const auto& name : ::vietasr::PresetRegistry::Instance().List()) {
+        writer.String(name);
+    }
+    writer.EndArray();
+    return StoreResult(writer.Str());
+}
+
+const char* vietasr_available_execution_providers(void) {
+    ::vietasr::JsonWriter writer;
+    writer.BeginArray();
+    for (const auto& name : ::vietasr::OnnxAvailableProviders()) {
         writer.String(name);
     }
     writer.EndArray();
@@ -168,6 +186,11 @@ const char* vietasr_result(VietasrSession* session) {
 const char* vietasr_final_result(VietasrSession* session) {
     if (!session) return "{}";
     return StoreResult(ToCxx(session)->Final());
+}
+
+const char* vietasr_active_execution_provider(VietasrSession* session) {
+    if (!session) return "";
+    return StoreResult(ToCxx(session)->ActiveProvider());
 }
 
 const char* vietasr_transcribe_file(VietasrPipeline* pipeline, const char* wav_path) {

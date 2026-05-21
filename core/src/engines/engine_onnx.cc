@@ -4,13 +4,28 @@
 
 #if VIETASR_HAS_ONNXRUNTIME
 #  include <onnxruntime_cxx_api.h>
+#  include <algorithm>
 #  include <memory>
 #  include <string>
+#  include <unordered_map>
 #  include <vector>
+#  include "vietasr.h"
 #  ifdef _WIN32
 #    define WIN32_LEAN_AND_MEAN
 #    define NOMINMAX
 #    include <windows.h>
+#  endif
+// Provider-factory headers ship only inside the matching ONNX Runtime binary.
+// core/CMakeLists.txt defines VIETASR_EP_*_AVAILABLE after inspecting the
+// fetched runtime, so the same source compiles against any ORT package.
+#  ifdef VIETASR_EP_COREML_AVAILABLE
+#    include <coreml_provider_factory.h>
+#  endif
+#  ifdef VIETASR_EP_NNAPI_AVAILABLE
+#    include <nnapi_provider_factory.h>
+#  endif
+#  ifdef VIETASR_EP_DIRECTML_AVAILABLE
+#    include <dml_provider_factory.h>
 #  endif
 
 namespace vietasr {
@@ -33,13 +48,16 @@ std::wstring Utf8ToWide(const std::string& s) {
 
 class OnnxEngine final : public Engine {
 public:
-    OnnxEngine()
-        : env_(ORT_LOGGING_LEVEL_WARNING, "vietasr") {
+    explicit OnnxEngine(const EpPreference& ep)
+        : env_(ORT_LOGGING_LEVEL_WARNING, "vietasr"), ep_pref_(ep) {
         session_options_.SetIntraOpNumThreads(1);
         session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_BASIC);
+        ConfigureProviders();
     }
 
     const char* backend_name() const override { return "onnx"; }
+
+    const char* active_provider() const override { return active_provider_.c_str(); }
 
     Status LoadModel(const std::string& model_path) override {
         try {
@@ -168,6 +186,144 @@ public:
     void Reset() override {}
 
 private:
+    // Builds the execution-provider chain on session_options_ from ep_pref_.
+    // Never throws: a provider that fails to register is logged and skipped,
+    // leaving ONNX Runtime's CPU provider as the implicit fallback.
+    void ConfigureProviders() {
+        std::vector<std::string> available;
+        try {
+            available = Ort::GetAvailableProviders();
+        } catch (const Ort::Exception&) {
+            // Treat as CPU-only.
+        }
+
+        std::vector<int> wanted;
+        if (ep_pref_.ep_enum == VIETASR_EP_AUTO) {
+            // Platform priority order; CPU is always the implicit fallback.
+#if defined(__APPLE__)
+            wanted = {VIETASR_EP_COREML};
+#elif defined(__ANDROID__)
+            wanted = {VIETASR_EP_NNAPI, VIETASR_EP_XNNPACK};
+#elif defined(_WIN32)
+#  if defined(_M_ARM64)
+            wanted = {VIETASR_EP_QNN};
+#  else
+            wanted = {VIETASR_EP_CUDA, VIETASR_EP_DIRECTML};
+#  endif
+#elif defined(__linux__)
+            wanted = {VIETASR_EP_CUDA, VIETASR_EP_TENSORRT};
+#endif
+        } else if (ep_pref_.ep_enum != VIETASR_EP_CPU) {
+            wanted = {ep_pref_.ep_enum};
+        }
+
+        for (int ep : wanted) {
+            if (TryAppendProvider(ep, available)) {
+                VIETASR_LOG_INFO("engine_onnx")
+                    << "execution provider: " << active_provider_;
+                return;
+            }
+        }
+
+        if (ep_pref_.ep_enum != VIETASR_EP_AUTO
+                && ep_pref_.ep_enum != VIETASR_EP_CPU) {
+            VIETASR_LOG_INFO("engine_onnx")
+                << "requested execution provider '"
+                << EpEnumName(ep_pref_.ep_enum)
+                << "' unavailable in this build; using CPU";
+        }
+        // active_provider_ stays "CPUExecutionProvider".
+    }
+
+    // Registers one execution provider on session_options_. Returns false if the
+    // provider is not compiled into this ORT binary, not present at runtime, or
+    // throws while registering.
+    bool TryAppendProvider(int ep, const std::vector<std::string>& available) {
+        [[maybe_unused]] auto has = [&](const char* name) {
+            return std::find(available.begin(), available.end(), name)
+                   != available.end();
+        };
+        try {
+            switch (ep) {
+#ifdef VIETASR_EP_CUDA_AVAILABLE
+            case VIETASR_EP_CUDA: {
+                if (!has("CUDAExecutionProvider")) return false;
+                OrtCUDAProviderOptions opts{};
+                opts.device_id = ep_pref_.device_id;
+                session_options_.AppendExecutionProvider_CUDA(opts);
+                active_provider_ = "CUDAExecutionProvider";
+                return true;
+            }
+#endif
+#ifdef VIETASR_EP_TENSORRT_AVAILABLE
+            case VIETASR_EP_TENSORRT: {
+                if (!has("TensorrtExecutionProvider")) return false;
+                OrtTensorRTProviderOptions opts{};
+                opts.device_id = ep_pref_.device_id;
+                session_options_.AppendExecutionProvider_TensorRT(opts);
+                active_provider_ = "TensorrtExecutionProvider";
+                return true;
+            }
+#endif
+#ifdef VIETASR_EP_COREML_AVAILABLE
+            case VIETASR_EP_COREML: {
+                if (!has("CoreMLExecutionProvider")) return false;
+                Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CoreML(
+                    session_options_, /*coreml_flags=*/0));
+                active_provider_ = "CoreMLExecutionProvider";
+                return true;
+            }
+#endif
+#ifdef VIETASR_EP_NNAPI_AVAILABLE
+            case VIETASR_EP_NNAPI: {
+                if (!has("NnapiExecutionProvider")) return false;
+                Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_Nnapi(
+                    session_options_, /*nnapi_flags=*/0));
+                active_provider_ = "NnapiExecutionProvider";
+                return true;
+            }
+#endif
+#ifdef VIETASR_EP_XNNPACK_AVAILABLE
+            case VIETASR_EP_XNNPACK: {
+                if (!has("XnnpackExecutionProvider")) return false;
+                session_options_.AppendExecutionProvider("XNNPACK", {});
+                active_provider_ = "XnnpackExecutionProvider";
+                return true;
+            }
+#endif
+#ifdef VIETASR_EP_DIRECTML_AVAILABLE
+            case VIETASR_EP_DIRECTML: {
+                if (!has("DmlExecutionProvider")) return false;
+                // DirectML requires sequential execution with mem pattern off.
+                session_options_.DisableMemPattern();
+                session_options_.SetExecutionMode(ORT_SEQUENTIAL);
+                Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_DML(
+                    session_options_, ep_pref_.device_id));
+                active_provider_ = "DmlExecutionProvider";
+                return true;
+            }
+#endif
+#ifdef VIETASR_EP_QNN_AVAILABLE
+            case VIETASR_EP_QNN: {
+                if (!has("QNNExecutionProvider")) return false;
+                std::unordered_map<std::string, std::string> opts;
+                opts["backend_path"] = "libQnnHtp.so";
+                session_options_.AppendExecutionProvider("QNN", opts);
+                active_provider_ = "QNNExecutionProvider";
+                return true;
+            }
+#endif
+            default:
+                return false;
+            }
+        } catch (const Ort::Exception& exc) {
+            VIETASR_LOG_WARN("engine_onnx")
+                << "could not enable execution provider '" << EpEnumName(ep)
+                << "': " << exc.what() << " — falling back";
+            return false;
+        }
+    }
+
     Status InitSessionMeta() {
         try {
             Ort::AllocatorWithDefaultOptions allocator;
@@ -201,6 +357,8 @@ private:
     Ort::Env env_;
     Ort::SessionOptions session_options_;
     std::unique_ptr<Ort::Session> session_;
+    EpPreference ep_pref_;
+    std::string active_provider_{"CPUExecutionProvider"};
 
     std::vector<std::string> input_names_storage_;
     std::vector<std::string> output_names_storage_;
@@ -210,8 +368,16 @@ private:
 
 }
 
-std::unique_ptr<Engine> CreateOnnxEngine() {
-    return std::make_unique<OnnxEngine>();
+std::unique_ptr<Engine> CreateOnnxEngine(const EpPreference& ep) {
+    return std::make_unique<OnnxEngine>(ep);
+}
+
+std::vector<std::string> OnnxAvailableProviders() {
+    try {
+        return Ort::GetAvailableProviders();
+    } catch (const Ort::Exception&) {
+        return {};
+    }
 }
 
 }
@@ -220,11 +386,14 @@ std::unique_ptr<Engine> CreateOnnxEngine() {
 
 namespace vietasr {
 
-std::unique_ptr<Engine> CreateOnnxEngine() {
+std::unique_ptr<Engine> CreateOnnxEngine(const EpPreference& ep) {
+    (void)ep;
     VIETASR_LOG_DEBUG("engine_onnx")
         << "ONNX Runtime backend not compiled in (set -DVIETASR_BACKEND_ONNX=ON and ensure onnxruntime is available)";
     return nullptr;
 }
+
+std::vector<std::string> OnnxAvailableProviders() { return {}; }
 
 }
 

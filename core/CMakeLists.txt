@@ -22,10 +22,16 @@ option(VIETASR_BUILD_EXAMPLES "Build example CLIs" OFF)
 # libvietasr themselves and turn this OFF to avoid duplicate install rules.
 option(VIETASR_INSTALL "Emit install() rules for libvietasr" ON)
 
-option(VIETASR_BACKEND_ONNX   "Enable ONNX Runtime backend (default: everywhere)" ON)
-option(VIETASR_BACKEND_COREML "Enable CoreML backend (Apple platforms)" OFF)
+option(VIETASR_BACKEND_ONNX "Enable ONNX Runtime backend (default: everywhere)" ON)
 
-message(STATUS "vietasr backends: onnx=${VIETASR_BACKEND_ONNX} coreml=${VIETASR_BACKEND_COREML}")
+# Which ONNX Runtime build to link against. "cpu" is the default and the only
+# variant that ships as the standard release artifacts; "cuda" and "directml"
+# produce opt-in GPU builds (see Phase 3 of the EP coverage plan).
+set(VIETASR_ONNX_VARIANT "cpu" CACHE STRING
+    "ONNX Runtime variant: cpu | cuda (NVIDIA, Linux/Win x64) | directml (Win x64)")
+set_property(CACHE VIETASR_ONNX_VARIANT PROPERTY STRINGS cpu cuda directml)
+
+message(STATUS "vietasr backend: onnx=${VIETASR_BACKEND_ONNX} variant=${VIETASR_ONNX_VARIANT}")
 
 option(VIETASR_WITH_CURL "Use libcurl for HTTP model downloads" ON)
 
@@ -42,40 +48,90 @@ if(VIETASR_BACKEND_ONNX)
         set(ONNXRUNTIME_VERSION "1.20.1")
     endif()
 
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
-        set(_ort_url "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz")
-        set(_ort_dirname "onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}")
-    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-        set(_ort_url "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-aarch64-${ONNXRUNTIME_VERSION}.tgz")
-        set(_ort_dirname "onnxruntime-linux-aarch64-${ONNXRUNTIME_VERSION}")
-    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-        set(_ort_url "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-osx-universal2-${ONNXRUNTIME_VERSION}.tgz")
-        set(_ort_dirname "onnxruntime-osx-universal2-${ONNXRUNTIME_VERSION}")
-    elseif(WIN32)
-        set(_ort_url "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip")
-        set(_ort_dirname "onnxruntime-win-x64-${ONNXRUNTIME_VERSION}")
+    string(TOLOWER "${VIETASR_ONNX_VARIANT}" _ort_variant)
+    set(_ort_base "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}")
+    set(_ort_is_x64 OFF)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|AMD64")
+        set(_ort_is_x64 ON)
+    endif()
+
+    # Exactly one of these is set: _ort_url is a GitHub release archive that
+    # FetchContent extracts directly; _ort_nupkg is a NuGet package (a zip with
+    # no extension CMake recognises) fetched + extracted by hand further down.
+    set(_ort_url "")
+    set(_ort_nupkg "")
+
+    if(_ort_variant STREQUAL "cuda")
+        # CUDA + TensorRT EPs ship only in the dedicated -gpu packages, and only
+        # for Linux x64 and Windows x64.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND _ort_is_x64)
+            set(_ort_url "${_ort_base}/onnxruntime-linux-x64-gpu-${ONNXRUNTIME_VERSION}.tgz")
+        elseif(WIN32 AND _ort_is_x64)
+            set(_ort_url "${_ort_base}/onnxruntime-win-x64-gpu-${ONNXRUNTIME_VERSION}.zip")
+        else()
+            message(FATAL_ERROR
+                "VIETASR_ONNX_VARIANT=cuda is only available for Linux x64 and Windows x64")
+        endif()
+    elseif(_ort_variant STREQUAL "directml")
+        # DirectML is NOT published as a GitHub release archive — it ships only
+        # in the Microsoft.ML.OnnxRuntime.DirectML NuGet package. Windows x64
+        # only. The DirectML.dll redistributable is a separate NuGet dependency,
+        # resolved in the manual-extract branch below.
+        if(WIN32 AND _ort_is_x64)
+            set(_ort_nupkg "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/${ONNXRUNTIME_VERSION}")
+        else()
+            message(FATAL_ERROR
+                "VIETASR_ONNX_VARIANT=directml is only available for Windows x64")
+        endif()
     else()
-        message(WARNING "no onnxruntime prebuilt for this platform; engine_onnx will be a stub")
-        set(_ort_url "")
+        # cpu (default): the standard per-platform prebuilt.
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND _ort_is_x64)
+            set(_ort_url "${_ort_base}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz")
+        elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
+            set(_ort_url "${_ort_base}/onnxruntime-linux-aarch64-${ONNXRUNTIME_VERSION}.tgz")
+        elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+            set(_ort_url "${_ort_base}/onnxruntime-osx-universal2-${ONNXRUNTIME_VERSION}.tgz")
+        elseif(WIN32 AND _ort_is_x64)
+            set(_ort_url "${_ort_base}/onnxruntime-win-x64-${ONNXRUNTIME_VERSION}.zip")
+        elseif(WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
+            set(_ort_url "${_ort_base}/onnxruntime-win-arm64-${ONNXRUNTIME_VERSION}.zip")
+        else()
+            message(WARNING "no onnxruntime prebuilt for this platform; engine_onnx will be a stub")
+        endif()
     endif()
 
     if(_ort_url)
         include(FetchContent)
         FetchContent_Declare(onnxruntime URL "${_ort_url}")
         FetchContent_MakeAvailable(onnxruntime)
-        set(ONNXRUNTIME_ROOT         "${onnxruntime_SOURCE_DIR}" CACHE INTERNAL "")
-        set(ONNXRUNTIME_INCLUDE_DIR  "${ONNXRUNTIME_ROOT}/include" CACHE INTERNAL "")
+        set(ONNXRUNTIME_ROOT        "${onnxruntime_SOURCE_DIR}" CACHE INTERNAL "")
+        set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_ROOT}/include" CACHE INTERNAL "")
+        set(_ort_lib_dir            "${ONNXRUNTIME_ROOT}/lib")
+    elseif(_ort_nupkg)
+        # A .nupkg has no extension FetchContent recognises, so download then
+        # extract by hand. NuGet lays native libs out under runtimes/<rid>/native
+        # and headers under build/native/include. The Microsoft.AI.DirectML
+        # dependency (which provides DirectML.dll) is resolved by reading the
+        # .nuspec rather than hard-coding a version.
+        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchDirectML.cmake)
+        vietasr_fetch_directml("${_ort_nupkg}" "${CMAKE_BINARY_DIR}")
+        set(ONNXRUNTIME_ROOT        "${VIETASR_DIRECTML_ROOT}" CACHE INTERNAL "")
+        set(ONNXRUNTIME_INCLUDE_DIR "${VIETASR_DIRECTML_ROOT}/build/native/include" CACHE INTERNAL "")
+        set(_ort_lib_dir            "${VIETASR_DIRECTML_NATIVE_DIR}")
+    endif()
+
+    if(DEFINED _ort_lib_dir)
         find_library(ONNXRUNTIME_LIB
             NAMES onnxruntime
-            PATHS "${ONNXRUNTIME_ROOT}/lib"
+            PATHS "${_ort_lib_dir}"
             NO_DEFAULT_PATH
         )
         if(ONNXRUNTIME_LIB)
-            message(STATUS "onnxruntime: ${ONNXRUNTIME_LIB}")
+            message(STATUS "onnxruntime (${_ort_variant}): ${ONNXRUNTIME_LIB}")
             set(VIETASR_HAS_ONNXRUNTIME 1 CACHE INTERNAL "")
-            set(ONNXRUNTIME_LIB_DIR "${ONNXRUNTIME_ROOT}/lib" CACHE INTERNAL "")
+            set(ONNXRUNTIME_LIB_DIR "${_ort_lib_dir}" CACHE INTERNAL "")
         else()
-            message(WARNING "onnxruntime lib not found under ${ONNXRUNTIME_ROOT}")
+            message(WARNING "onnxruntime lib not found under ${_ort_lib_dir}")
         endif()
     endif()
 endif()
@@ -176,12 +232,28 @@ set(VIETASR_BACKEND_DEFINES)
 if(VIETASR_BACKEND_ONNX)
     list(APPEND VIETASR_BACKEND_DEFINES VIETASR_BACKEND_ONNX_ENABLED=1)
 endif()
-if(VIETASR_BACKEND_COREML)
-    list(APPEND VIETASR_BACKEND_DEFINES VIETASR_BACKEND_COREML_ENABLED=1)
-endif()
-
-if(VIETASR_BACKEND_COREML)
-    list(APPEND VIETASR_CORE_SOURCES src/engines/engine_coreml.mm)
+# Detect which execution providers ship inside the fetched ONNX Runtime tree and
+# expose them as compile defines. engine_onnx.cc #ifdef-guards every EP path on
+# these, so one source file compiles against any ORT package (CPU, GPU, mobile).
+if(VIETASR_HAS_ONNXRUNTIME)
+    if(EXISTS "${ONNXRUNTIME_INCLUDE_DIR}/coreml_provider_factory.h")
+        list(APPEND VIETASR_BACKEND_DEFINES VIETASR_EP_COREML_AVAILABLE=1)
+    endif()
+    if(EXISTS "${ONNXRUNTIME_INCLUDE_DIR}/nnapi_provider_factory.h")
+        list(APPEND VIETASR_BACKEND_DEFINES VIETASR_EP_NNAPI_AVAILABLE=1)
+    endif()
+    if(EXISTS "${ONNXRUNTIME_INCLUDE_DIR}/dml_provider_factory.h")
+        list(APPEND VIETASR_BACKEND_DEFINES VIETASR_EP_DIRECTML_AVAILABLE=1)
+    endif()
+    file(GLOB _ort_cuda_libs "${ONNXRUNTIME_LIB_DIR}/*onnxruntime_providers_cuda*")
+    if(_ort_cuda_libs)
+        list(APPEND VIETASR_BACKEND_DEFINES VIETASR_EP_CUDA_AVAILABLE=1)
+    endif()
+    file(GLOB _ort_trt_libs "${ONNXRUNTIME_LIB_DIR}/*onnxruntime_providers_tensorrt*")
+    if(_ort_trt_libs)
+        list(APPEND VIETASR_BACKEND_DEFINES VIETASR_EP_TENSORRT_AVAILABLE=1)
+    endif()
+    message(STATUS "vietasr execution-provider defines: ${VIETASR_BACKEND_DEFINES}")
 endif()
 
 if(VIETASR_MODULE_VIETASR)

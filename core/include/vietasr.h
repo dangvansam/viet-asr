@@ -18,7 +18,7 @@ extern "C" {
 #endif
 
 #define VIETASR_VERSION_MAJOR 0
-#define VIETASR_VERSION_MINOR 1
+#define VIETASR_VERSION_MINOR 2
 #define VIETASR_VERSION_PATCH 0
 
 typedef struct VietasrPipeline VietasrPipeline;
@@ -39,8 +39,29 @@ typedef enum {
 typedef enum {
     VIETASR_BACKEND_AUTO   = 0,
     VIETASR_BACKEND_ONNX   = 1,
+    /* Deprecated: CoreML is an ONNX Runtime execution provider, not a separate
+     * backend. Kept for ABI compatibility; it is remapped internally to the
+     * ONNX backend with VIETASR_EP_COREML. Use
+     * vietasr_pipeline_set_execution_provider() instead. */
     VIETASR_BACKEND_COREML = 2
 } VietasrBackend;
+
+/* ONNX Runtime execution provider. VIETASR_EP_AUTO probes the best provider
+ * available on the device and falls back to CPU; an explicit value forces a
+ * provider and still falls back to CPU if it is unavailable. Whether a given
+ * provider is usable depends on which ONNX Runtime binary the SDK was built
+ * against (see vietasr_available_execution_providers). */
+typedef enum {
+    VIETASR_EP_AUTO     = 0,
+    VIETASR_EP_CPU      = 1,
+    VIETASR_EP_CUDA     = 2,
+    VIETASR_EP_TENSORRT = 3,
+    VIETASR_EP_COREML   = 4,
+    VIETASR_EP_NNAPI    = 5,
+    VIETASR_EP_XNNPACK  = 6,
+    VIETASR_EP_DIRECTML = 7,
+    VIETASR_EP_QNN      = 8
+} VietasrExecutionProvider;
 
 typedef enum {
     VIETASR_LOG_TRACE = 0,
@@ -64,6 +85,13 @@ VIETASR_API VietasrStatus    vietasr_pipeline_add_module(VietasrPipeline* pipeli
                                                          const char* json_config);
 VIETASR_API VietasrStatus    vietasr_pipeline_set_backend(VietasrPipeline* pipeline,
                                                           VietasrBackend backend);
+/* Select the ONNX Runtime execution provider for this pipeline. device_id picks
+ * the accelerator index on multi-device hosts (ignored for CPU/AUTO). Takes
+ * effect on the next vietasr_pipeline_build(). */
+VIETASR_API VietasrStatus    vietasr_pipeline_set_execution_provider(
+                                 VietasrPipeline* pipeline,
+                                 VietasrExecutionProvider ep,
+                                 int device_id);
 VIETASR_API VietasrStatus    vietasr_pipeline_set_model_dir(VietasrPipeline* pipeline,
                                                             const char* model_dir);
 VIETASR_API VietasrStatus    vietasr_pipeline_build(VietasrPipeline* pipeline);
@@ -71,6 +99,11 @@ VIETASR_API void             vietasr_pipeline_free(VietasrPipeline* pipeline);
 
 VIETASR_API const char*      vietasr_list_modules(void);
 VIETASR_API const char*      vietasr_list_presets(void);
+
+/* JSON array of execution providers compiled into the linked ONNX Runtime, by
+ * canonical name (e.g. ["CUDAExecutionProvider","CPUExecutionProvider"]).
+ * Returns "[]" when the ONNX backend is not compiled in. */
+VIETASR_API const char*      vietasr_available_execution_providers(void);
 
 VIETASR_API VietasrSession*  vietasr_session_new(VietasrPipeline* pipeline, float sample_rate);
 VIETASR_API void             vietasr_session_free(VietasrSession* session);
@@ -86,6 +119,11 @@ VIETASR_API VietasrFrameStatus vietasr_accept_waveform_bytes(VietasrSession* ses
 VIETASR_API const char* vietasr_partial_result(VietasrSession* session);
 VIETASR_API const char* vietasr_result(VietasrSession* session);
 VIETASR_API const char* vietasr_final_result(VietasrSession* session);
+
+/* Canonical name of the execution provider this session actually runs on
+ * (e.g. "CoreMLExecutionProvider", "CPUExecutionProvider"). Reflects the EP
+ * fallback outcome — may differ from the requested provider. */
+VIETASR_API const char* vietasr_active_execution_provider(VietasrSession* session);
 
 VIETASR_API const char* vietasr_transcribe_file(VietasrPipeline* pipeline,
                                                 const char* wav_path);

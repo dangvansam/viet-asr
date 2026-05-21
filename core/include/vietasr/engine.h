@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "vietasr/ep_config.h"
 #include "vietasr/types.h"
 
 namespace vietasr {
@@ -20,6 +21,10 @@ public:
     virtual ~Engine() = default;
 
     virtual const char* backend_name() const = 0;
+
+    // Canonical name of the execution provider the engine actually runs on
+    // (e.g. "CPUExecutionProvider"). Reflects the EP fallback outcome.
+    virtual const char* active_provider() const { return "CPUExecutionProvider"; }
 
     virtual Status LoadModel(const std::string& model_path) = 0;
 
@@ -38,9 +43,14 @@ public:
 
 class EngineFactory final {
 public:
-    static std::unique_ptr<Engine> Create(int backend_enum);
-    static std::unique_ptr<Engine> CreateAuto();
+    static std::unique_ptr<Engine> Create(int backend_enum,
+                                          EpPreference ep = EpPreference{});
+    static std::unique_ptr<Engine> CreateAuto(EpPreference ep = EpPreference{});
 };
+
+// Execution providers compiled into the linked ONNX Runtime, by canonical name
+// (e.g. "CPUExecutionProvider"). Empty when the ONNX backend is not compiled in.
+std::vector<std::string> OnnxAvailableProviders();
 
 }
 
