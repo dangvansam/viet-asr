@@ -35,6 +35,7 @@ def main() -> int:
     app = create_app(engine)
 
     print(f"  pipeline : {engine.description}", flush=True)
+    print(f"  runtime  : {engine.active_execution_provider()}", flush=True)
     print(f"  REST     : http://{args.host}:{args.port}/v1/audio/transcriptions", flush=True)
     print(f"  WebSocket: ws://{args.host}:{args.port}/v1/stream", flush=True)
 

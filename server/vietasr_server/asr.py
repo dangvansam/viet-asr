@@ -34,5 +34,15 @@ class AsrEngine:
         """Open a streaming session; caller owns its lifetime."""
         return self._pipeline.stream(sample_rate)
 
+    def active_execution_provider(self) -> str:
+        """ONNX Runtime execution provider the engine runs on — e.g.
+        "CUDAExecutionProvider" on the GPU image, "CPUExecutionProvider" on the
+        CPU/edge image. Reflects the auto-detect + fallback outcome."""
+        session = self._pipeline.stream(16000.0)
+        try:
+            return session.active_execution_provider()
+        finally:
+            session.close()
+
     def close(self) -> None:
         self._pipeline.close()

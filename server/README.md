@@ -19,6 +19,32 @@ docker compose up           # from the repo root; builds the image on first run
 Server is on `http://localhost:8000`. Override the host port with
 `VIETASR_PORT=9000 docker compose up`.
 
+This default image is small and multi-arch (amd64 + arm64) — the right choice
+for **edge / CPU-only** devices. It runs on ONNX Runtime's CPU provider, which
+is the best runtime ONNX Runtime's standard prebuilts expose on those targets.
+
+### GPU server (NVIDIA CUDA)
+
+For a server with an NVIDIA GPU, use the CUDA image — it bundles the ONNX
+Runtime CUDA execution provider and auto-detects the GPU at startup (falling
+back to CPU if none is visible). It needs the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
+on the host.
+
+```bash
+docker compose --profile gpu up server-gpu        # build + run locally
+```
+
+Or directly, or from Docker Hub (`dangvansam/viet-asr:gpu`):
+
+```bash
+docker build -f server/Dockerfile.gpu -t viet-asr:gpu .
+docker run --gpus all -p 8000:8000 viet-asr:gpu
+```
+
+The startup log prints the active runtime — `runtime : CUDAExecutionProvider`
+when the GPU is engaged, `CPUExecutionProvider` if it fell back.
+
 ### CLI (Python, any OS)
 
 ```bash

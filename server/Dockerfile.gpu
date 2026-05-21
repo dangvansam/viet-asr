@@ -1,0 +1,88 @@
+# syntax=docker/dockerfile:1
+#
+# VietASR server image — NVIDIA GPU (CUDA). Build context MUST be the repo root:
+#   docker build -f server/Dockerfile.gpu -t vietasr-server:gpu .
+# Run with the NVIDIA Container Toolkit installed on the host:
+#   docker run --gpus all -p 8000:8000 vietasr-server:gpu
+#
+# The ONNX Runtime CUDA execution provider needs CUDA 12.x + cuDNN 9.x, supplied
+# by the nvidia/cuda *-cudnn-runtime* base. The Python wheel is built with
+# VIETASR_ONNX_VARIANT=cuda, so libonnxruntime_providers_cuda.so is bundled into
+# the image and the C++ engine auto-detects the CUDA provider at startup
+# (falling back to CPU if no GPU is visible).
+#
+# Edge / CPU-only deployments use server/Dockerfile instead — that image stays
+# small and multi-arch (amd64 + arm64); ONNX Runtime's standard prebuilts expose
+# only the CPU provider there, which the engine selects automatically.
+
+ARG CUDA_IMAGE=nvidia/cuda:12.6.3-cudnn-runtime-ubuntu24.04
+
+# ---- builder: compile the CUDA wheel, install into a venv, slim it ---------
+FROM ${CUDA_IMAGE} AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential cmake git curl ca-certificates xz-utils \
+        python3.12 python3.12-venv python3.12-dev python3-pip python3-build \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY core/ core/
+COPY models/ models/
+COPY bindings/python/ bindings/python/
+
+# Build the binding wheel against the CUDA ONNX Runtime. scikit-build-core picks
+# up CMAKE_ARGS, so the bundled libvietasr links the -gpu runtime and the wheel
+# carries libonnxruntime_providers_cuda.so. (Compiling needs no CUDA toolkit —
+# the CUDA libraries are loaded at runtime.)
+ENV CMAKE_ARGS="-DVIETASR_ONNX_VARIANT=cuda"
+RUN python3.12 -m build --wheel --outdir /wheels bindings/python
+
+# Static ffmpeg (CUDA images are x86_64-only, so amd64 is the single target).
+RUN set -eux; \
+    curl -fsSL "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" \
+        -o /tmp/ff.tar.xz; \
+    mkdir -p /tmp/ff; tar -xf /tmp/ff.tar.xz -C /tmp/ff --strip-components=1; \
+    install -m 0755 /tmp/ff/ffmpeg /usr/local/bin/ffmpeg; \
+    rm -rf /tmp/ff /tmp/ff.tar.xz
+
+# Server sources come last so editing them does not bust the wheel cache.
+COPY server/ server/
+
+# Install into a self-contained venv. Slimming is conservative here: unlike the
+# CPU image we must KEEP every libonnxruntime*.so (the CUDA provider libraries),
+# so only the duplicate scikit-build install tree and bytecode are dropped.
+RUN python3.12 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir /wheels/*.whl ./server \
+    && NV=/opt/venv/lib/python3.12/site-packages/vietasr/_native \
+    && rm -rf "$NV/lib" "$NV/include" \
+    && SP=/opt/venv/lib/python3.12/site-packages \
+    && rm -rf "$SP"/pip "$SP"/pip-* "$SP"/setuptools "$SP"/setuptools-* \
+              "$SP"/pkg_resources "$SP"/_distutils_hack "$SP"/wheel "$SP"/wheel-* \
+              "$SP"/numpy/tests "$SP"/numpy/_core/tests \
+    && find /opt/venv -name '__pycache__' -type d -prune -exec rm -rf {} + \
+    && find /opt/venv -name '*.pyc' -delete
+
+# ---- runtime --------------------------------------------------------------
+FROM ${CUDA_IMAGE} AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3.12 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
+
+ENV PATH=/opt/venv/bin:$PATH
+# NOTE: do NOT set VIETASR_ONNX_VARIANT here — that variable tells the Python
+# loader to *download* a GPU bundle, but this image already has it baked in.
+# The C++ engine auto-detects the CUDA provider from the bundled runtime.
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+RUN useradd --create-home --uid 10001 vietasr
+USER vietasr
+EXPOSE 8000
+
+CMD ["vietasr-server", "--host", "0.0.0.0", "--port", "8000"]

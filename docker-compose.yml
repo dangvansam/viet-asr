@@ -1,5 +1,6 @@
 name: viet-asr
 services:
+  # CPU / edge image — small, multi-arch (amd64 + arm64). `docker compose up`.
   server:
     image: viet-asr:latest
     build:
@@ -14,3 +15,23 @@ services:
       timeout: 5s
       retries: 3
       start_period: 40s
+
+  # NVIDIA GPU image — for servers with a CUDA GPU + the NVIDIA Container
+  # Toolkit. Opt-in (separate profile) so a plain `docker compose up` stays CPU:
+  #   docker compose --profile gpu up server-gpu
+  server-gpu:
+    image: viet-asr:gpu
+    profiles: ["gpu"]
+    build:
+      context: .
+      dockerfile: server/Dockerfile.gpu
+    ports:
+      - 8001:8000
+    restart: unless-stopped
+    gpus: all
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
