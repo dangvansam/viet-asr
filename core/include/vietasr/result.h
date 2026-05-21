@@ -31,6 +31,11 @@ public:
     std::string SnapshotJson() const;
     std::string FinalJson();
 
+    // The current canonical transcript text (unescaped, raw UTF-8). Empty when
+    // no module has emitted text yet. Used by text-consuming modules such as
+    // itn, which read the ASR output and rewrite it in OnFinalize.
+    std::string CurrentText() const;
+
 private:
     class Impl;
     std::unique_ptr<Impl> impl_;

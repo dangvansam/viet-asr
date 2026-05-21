@@ -17,9 +17,11 @@ static Status BuildTranscribeRichPreset(Pipeline* pipeline) {
     if (!status.ok()) return status;
     status = pipeline->AddModule("vietasr", "{}");
     if (!status.ok()) return status;
-    status = pipeline->AddModule("punctuation", "{}");
-    if (!status.ok()) return status;
+    // itn before punctuation: ITN expects lower-cased text without punctuation,
+    // so it must rewrite the raw ASR transcript before punctuation restores it.
     status = pipeline->AddModule("itn", "{}");
+    if (!status.ok()) return status;
+    status = pipeline->AddModule("punctuation", "{}");
     if (!status.ok()) return status;
     return Status::Ok();
 }

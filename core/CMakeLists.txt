@@ -91,12 +91,53 @@ option(VIETASR_MODULE_DIALECT      "Build dialect module (Phase 16 stub)" ON)
 option(VIETASR_MODULE_NOISE        "Build noise module (Phase 17 stub)" ON)
 
 option(VIETASR_EMBED_MODEL "Embed the vietasr model into libvietasr at build time" ON)
+option(VIETASR_EMBED_ITN   "Embed the Vietnamese ITN grammar into libvietasr" ON)
+
+# ---------------------------------------------------------------------------
+# OpenFst — required by the itn module's WFST inverse text normalizer. We use
+# a CMake-friendly fork (the one sherpa-onnx ships, including to WebAssembly),
+# so the dependency stays light and portable across all bindings. Only the
+# core `fst` library is built; bin/script/extension targets are disabled.
+# ---------------------------------------------------------------------------
+if(VIETASR_MODULE_ITN)
+    set(HAVE_BIN       OFF CACHE BOOL "" FORCE)
+    set(HAVE_SCRIPT    OFF CACHE BOOL "" FORCE)
+    set(HAVE_COMPACT   OFF CACHE BOOL "" FORCE)
+    set(HAVE_COMPRESS  OFF CACHE BOOL "" FORCE)
+    set(HAVE_CONST     OFF CACHE BOOL "" FORCE)
+    set(HAVE_FAR       OFF CACHE BOOL "" FORCE)
+    set(HAVE_GRM       OFF CACHE BOOL "" FORCE)
+    set(HAVE_PDT       OFF CACHE BOOL "" FORCE)
+    set(HAVE_MPDT      OFF CACHE BOOL "" FORCE)
+    set(HAVE_LINEAR    OFF CACHE BOOL "" FORCE)
+    set(HAVE_LOOKAHEAD OFF CACHE BOOL "" FORCE)
+    set(HAVE_NGRAM     OFF CACHE BOOL "" FORCE)
+    set(HAVE_SPECIAL   OFF CACHE BOOL "" FORCE)
+    set(HAVE_FSTS      OFF CACHE BOOL "" FORCE)
+    set(OPENFST_USE_ABSL OFF CACHE BOOL "" FORCE)
+
+    include(FetchContent)
+    FetchContent_Declare(openfst
+        URL      "https://github.com/csukuangfj/openfst/archive/refs/tags/v1.8.5-2026-04-11.tar.gz"
+        URL_HASH SHA256=57fbc4b950ae81b1a0e1e298af15652da968a6723a592b7874e9b4027a80a5b4
+    )
+    # Build a static `fst` so it links cleanly into libvietasr — PIC is already
+    # on globally. BUILD_SHARED_LIBS is restored afterwards for other deps.
+    set(_vietasr_saved_shared "${BUILD_SHARED_LIBS}")
+    set(BUILD_SHARED_LIBS OFF)
+    FetchContent_MakeAvailable(openfst)
+    set(BUILD_SHARED_LIBS "${_vietasr_saved_shared}")
+    set(VIETASR_OPENFST_INCLUDE_DIR "${openfst_SOURCE_DIR}/src/include"
+        CACHE INTERNAL "")
+    message(STATUS "vietasr: openfst (itn) -> ${VIETASR_OPENFST_INCLUDE_DIR}")
+endif()
 
 include(GNUInstallDirs)
 
 set(VIETASR_PUBLIC_HEADERS
     include/vietasr.h
     include/vietasr/engine.h
+    include/vietasr/ep_config.h
     include/vietasr/logger.h
     include/vietasr/model_manager.h
     include/vietasr/module.h
@@ -161,7 +202,17 @@ if(VIETASR_MODULE_PUNCTUATION)
     list(APPEND VIETASR_CORE_SOURCES src/modules/punctuation/punctuation.cc)
 endif()
 if(VIETASR_MODULE_ITN)
-    list(APPEND VIETASR_CORE_SOURCES src/modules/itn/itn.cc)
+    list(APPEND VIETASR_CORE_SOURCES
+        src/modules/itn/itn.cc
+        src/modules/itn/processor.cc
+        src/modules/itn/embedded_itn.cc
+    )
+    if(VIETASR_EMBED_ITN)
+        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedItn.cmake)
+        vietasr_embed_itn(VIETASR_ITN_EMBED_SOURCES)
+        list(APPEND VIETASR_CORE_SOURCES ${VIETASR_ITN_EMBED_SOURCES})
+        message(STATUS "vietasr: VIETASR_EMBED_ITN=ON (ITN grammar baked into libvietasr)")
+    endif()
 endif()
 if(VIETASR_MODULE_DIARIZATION)
     list(APPEND VIETASR_CORE_SOURCES src/modules/diarization/diarization.cc)
@@ -214,6 +265,16 @@ if(VIETASR_EMBED_MODEL)
     target_compile_definitions(vietasr_objects PRIVATE VIETASR_HAS_EMBEDDED_MODEL=1)
 endif()
 
+if(VIETASR_MODULE_ITN)
+    # SYSTEM so openfst's own header warnings don't fail/flood vietasr's -Wall.
+    target_include_directories(vietasr_objects SYSTEM PRIVATE
+        "${VIETASR_OPENFST_INCLUDE_DIR}")
+    target_link_libraries(vietasr_objects PUBLIC fst)
+    if(VIETASR_EMBED_ITN)
+        target_compile_definitions(vietasr_objects PRIVATE VIETASR_HAS_EMBEDDED_ITN=1)
+    endif()
+endif()
+
 if(VIETASR_WITH_CURL)
     target_compile_definitions(vietasr_objects PRIVATE VIETASR_WITH_CURL=1)
     target_link_libraries(vietasr_objects PUBLIC CURL::libcurl)
@@ -243,6 +304,11 @@ if(VIETASR_WITH_CURL)
 endif()
 if(VIETASR_HAS_ONNXRUNTIME)
     target_link_libraries(vietasr PUBLIC "${ONNXRUNTIME_LIB}")
+endif()
+if(VIETASR_MODULE_ITN)
+    # `fst` is static; fold it into libvietasr ($<TARGET_OBJECTS> does not
+    # carry the object library's link deps).
+    target_link_libraries(vietasr PRIVATE fst)
 endif()
 
 set_target_properties(vietasr PROPERTIES

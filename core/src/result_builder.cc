@@ -14,6 +14,9 @@ public:
     std::vector<TextSegment> segments;
     std::vector<std::pair<std::string, double>> speakers;
     std::string partial;
+    // The unescaped transcript text. fields["text"] holds the JSON-escaped
+    // form for rendering; this holds the raw value for text-consuming modules.
+    std::string text_raw;
     bool is_final{false};
 
     std::string RenderUnlocked() const {
@@ -76,6 +79,7 @@ void ResultBuilder::Reset() {
     impl_->segments.clear();
     impl_->speakers.clear();
     impl_->partial.clear();
+    impl_->text_raw.clear();
     impl_->is_final = false;
 }
 
@@ -83,6 +87,7 @@ void ResultBuilder::SetText(const std::string& module, std::string text) {
     (void)module;
     std::lock_guard<std::mutex> lock(impl_->mutex);
     impl_->fields["text"] = JsonEscape(text);
+    impl_->text_raw = std::move(text);
 }
 
 void ResultBuilder::SetPartial(std::string text) {
@@ -119,6 +124,11 @@ std::string ResultBuilder::FinalJson() {
     std::lock_guard<std::mutex> lock(impl_->mutex);
     impl_->is_final = true;
     return impl_->RenderUnlocked();
+}
+
+std::string ResultBuilder::CurrentText() const {
+    std::lock_guard<std::mutex> lock(impl_->mutex);
+    return impl_->text_raw;
 }
 
 }
