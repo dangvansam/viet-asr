@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>VietASR — Browser Demo</title>
+    <title>VietASR — Demo trình duyệt</title>
     <style>
         body {
             font-family: system-ui, sans-serif;
@@ -12,12 +12,25 @@
             padding: 0 20px;
         }
         h1 { font-size: 1.4rem; }
+        h2 { font-size: 1.05rem; margin-top: 28px; margin-bottom: 8px; }
         button {
             font-size: 1rem;
             padding: 8px 16px;
             margin-right: 8px;
         }
-        #status { color: #666; margin: 12px 0; }
+        button:disabled { opacity: .5; cursor: not-allowed; }
+        #mic.recording {
+            background: #e23;
+            color: #fff;
+            border-color: #e23;
+            animation: pulse 1.2s infinite;
+        }
+        @keyframes pulse {
+            0%   { box-shadow: 0 0 0 0   rgba(238, 34, 51, .6); }
+            70%  { box-shadow: 0 0 0 12px rgba(238, 34, 51, 0); }
+            100% { box-shadow: 0 0 0 0   rgba(238, 34, 51, 0); }
+        }
+        #status { color: #666; margin: 14px 0; }
         #transcript {
             margin-top: 16px;
             padding: 16px;
@@ -27,67 +40,223 @@
             white-space: pre-wrap;
             font-size: 1.1rem;
         }
+        #transcript .partial { color: #999; }
     </style>
 </head>
 <body>
-    <h1>VietASR — Offline Vietnamese ASR in the browser</h1>
+    <h1>VietASR — Nhận dạng tiếng Việt ngoại tuyến trong trình duyệt</h1>
     <p>
-        Feature extraction + CTC decoding run in WebAssembly (compiled from the
-        shared C++ core). The streaming Conformer encoder runs via
-        <code>onnxruntime-web</code>. Everything is on-device — no server.
+        Fbank + CTC beam search + ITN (chuẩn hoá số) chạy trong WebAssembly biên
+        dịch từ C++ core. Encoder Conformer streaming chạy bằng
+        <code>onnxruntime-web</code> trong một Web Worker. Mọi thứ on-device —
+        không có server.
     </p>
 
-    <input type="file" id="file" accept="audio/wav,audio/*" />
-    <button id="run" disabled>Transcribe</button>
+    <h2>🎤 Ghi âm trực tiếp</h2>
+    <button id="mic" disabled>🎤 Bắt đầu nói</button>
 
-    <p id="status">Loading model…</p>
+    <h2>📁 Hoặc chọn file WAV</h2>
+    <input type="file" id="file" accept="audio/wav,audio/*" />
+    <button id="run" disabled>Nhận dạng</button>
+
+    <p id="status">Đang tải mô hình…</p>
     <div id="transcript"></div>
 
     <script type="module">
-        import { Pipeline } from "../src/index.js";
-
         const statusEl = document.getElementById("status");
         const transcriptEl = document.getElementById("transcript");
+        const micBtn = document.getElementById("mic");
         const runBtn = document.getElementById("run");
         const fileInput = document.getElementById("file");
 
-        let pipeline = null;
+        // The model lives in the repo at models/vietasr/. Resolved relative to
+        // this page, so serve the repo root (see bindings/webjs/README.md).
+        const modelUrl = new URL("../../../models/vietasr/", location.href).href;
 
-        (async () => {
-            try {
-                pipeline = await Pipeline.create();
-                statusEl.textContent = "Model ready. Pick a WAV file.";
+        const worker = new Worker(
+            new URL("./asr-worker.js", import.meta.url), { type: "module" });
+
+        let ready = false;
+        let recording = false;
+
+        worker.onmessage = (e) => {
+            const msg = e.data || {};
+            if (msg.type === "ready") {
+                ready = true;
+                micBtn.disabled = false;
                 runBtn.disabled = false;
-            } catch (err) {
-                statusEl.textContent = "Load failed: " + err.message;
+                statusEl.textContent =
+                    "Sẵn sàng. Bấm 🎤 để nói, hoặc chọn một file WAV.";
+            } else if (msg.type === "partial") {
+                renderPartial(msg.text);
+            } else if (msg.type === "final") {
+                renderFinal(msg.text || "");
+                micBtn.disabled = false;
+                runBtn.disabled = false;
+                statusEl.textContent = "Xong. Bấm 🎤 để nói tiếp.";
+            } else if (msg.type === "error") {
+                statusEl.textContent = "Lỗi: " + msg.message;
+                micBtn.disabled = false;
+                runBtn.disabled = false;
             }
-        })();
+        };
+
+        worker.postMessage({ type: "init", options: { modelUrl } });
+
+        function renderPartial(text) {
+            transcriptEl.textContent = "";
+            const span = document.createElement("span");
+            span.className = "partial";
+            span.textContent = text;
+            transcriptEl.appendChild(span);
+        }
+        function renderFinal(text) {
+            transcriptEl.textContent = text;
+        }
+
+        // ---- File transcription -------------------------------------------
+        runBtn.addEventListener("click", async () => {
+            if (!ready || recording || !fileInput.files.length) return;
+            statusEl.textContent = "Đang nhận dạng…";
+            transcriptEl.textContent = "";
+            runBtn.disabled = true;
+            micBtn.disabled = true;
+            try {
+                const { pcm, sampleRate } =
+                    await decodeAudio(fileInput.files[0]);
+                worker.postMessage(
+                    { type: "transcribe", pcm: pcm.buffer, sampleRate },
+                    [pcm.buffer]);
+            } catch (err) {
+                statusEl.textContent = "Lỗi: " + (err.message || err);
+                runBtn.disabled = false;
+                micBtn.disabled = false;
+            }
+        });
 
         async function decodeAudio(file) {
             const arrayBuffer = await file.arrayBuffer();
-            const ctx = new AudioContext();
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-            const channel = audioBuffer.getChannelData(0);
-            return { pcm: channel, sampleRate: audioBuffer.sampleRate };
+            const sampleRate = audioBuffer.sampleRate;
+            const pcm = new Float32Array(audioBuffer.getChannelData(0));
+            ctx.close();
+            return { pcm, sampleRate };
         }
 
-        runBtn.addEventListener("click", async () => {
-            if (!pipeline || !fileInput.files.length) return;
-            statusEl.textContent = "Transcribing…";
-            transcriptEl.textContent = "";
-            try {
-                const { pcm, sampleRate } = await decodeAudio(fileInput.files[0]);
-                const started = performance.now();
-                const text = await pipeline.transcribe(pcm, sampleRate);
-                const elapsed = (performance.now() - started) / 1000;
-                const duration = pcm.length / sampleRate;
-                transcriptEl.textContent = text;
-                statusEl.textContent =
-                    `Done in ${elapsed.toFixed(2)}s (RTF ${(elapsed / duration).toFixed(2)}).`;
-            } catch (err) {
-                statusEl.textContent = "Error: " + err.message;
-            }
+        // ---- Live microphone ----------------------------------------------
+        let audioCtx = null;
+        let mediaStream = null;
+        let workletNode = null;
+        let micBuffer = [];
+        let micBufferLen = 0;
+        let flushThreshold = 0;
+
+        micBtn.addEventListener("click", async () => {
+            if (!ready) return;
+            if (recording) { stopRecording(); return; }
+            await startRecording();
         });
+
+        async function startRecording() {
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia(
+                    { audio: true });
+            } catch (err) {
+                if (err && err.name === "NotAllowedError") {
+                    statusEl.textContent = "Không có quyền truy cập micro. " +
+                        "Vui lòng cấp quyền rồi thử lại.";
+                } else if (err && err.name === "NotFoundError") {
+                    statusEl.textContent =
+                        "Không tìm thấy micro trên thiết bị.";
+                } else {
+                    statusEl.textContent =
+                        "Lỗi micro: " + ((err && err.message) || err);
+                }
+                return;
+            }
+
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === "suspended") await audioCtx.resume();
+            flushThreshold = Math.round(audioCtx.sampleRate * 0.3);  // ~0.3 s
+            micBuffer = [];
+            micBufferLen = 0;
+
+            // Inline AudioWorklet processor — taps PCM, outputs silence.
+            const workletCode = `
+                class PcmTap extends AudioWorkletProcessor {
+                    process(inputs) {
+                        const ch = inputs[0][0];
+                        if (ch) this.port.postMessage(ch.slice(0));
+                        return true;
+                    }
+                }
+                registerProcessor('pcm-tap', PcmTap);
+            `;
+            const blobUrl = URL.createObjectURL(
+                new Blob([workletCode], { type: "application/javascript" }));
+            await audioCtx.audioWorklet.addModule(blobUrl);
+            URL.revokeObjectURL(blobUrl);
+
+            const source = audioCtx.createMediaStreamSource(mediaStream);
+            workletNode = new AudioWorkletNode(audioCtx, "pcm-tap");
+            workletNode.port.onmessage = (e) => onPcm(e.data);
+            source.connect(workletNode);
+            // Connect to destination so the node stays pulled; the processor
+            // writes no output, so nothing is played back (no echo).
+            workletNode.connect(audioCtx.destination);
+
+            recording = true;
+            transcriptEl.textContent = "";
+            micBtn.textContent = "⏹ Dừng";
+            micBtn.classList.add("recording");
+            runBtn.disabled = true;
+            statusEl.textContent = "Đang nghe… mời nói tiếng Việt.";
+            worker.postMessage({ type: "start" });
+        }
+
+        function onPcm(chunk) {
+            if (!recording) return;
+            micBuffer.push(chunk);
+            micBufferLen += chunk.length;
+            if (micBufferLen >= flushThreshold) flushMic();
+        }
+
+        function flushMic() {
+            if (micBufferLen === 0 || !audioCtx) return;
+            const merged = new Float32Array(micBufferLen);
+            let off = 0;
+            for (const c of micBuffer) { merged.set(c, off); off += c.length; }
+            micBuffer = [];
+            micBufferLen = 0;
+            worker.postMessage(
+                { type: "pcm", pcm: merged.buffer,
+                  sampleRate: audioCtx.sampleRate },
+                [merged.buffer]);
+        }
+
+        function stopRecording() {
+            if (!recording) return;
+            recording = false;
+            flushMic();                       // send the last buffered audio
+            worker.postMessage({ type: "stop" });
+            micBtn.textContent = "🎤 Bắt đầu nói";
+            micBtn.classList.remove("recording");
+            micBtn.disabled = true;           // re-enabled on the final result
+            statusEl.textContent = "Đang hoàn tất…";
+
+            if (workletNode) {
+                workletNode.port.onmessage = null;
+                workletNode.disconnect();
+            }
+            if (audioCtx) audioCtx.close();
+            if (mediaStream) {
+                mediaStream.getTracks().forEach((t) => t.stop());
+            }
+            workletNode = null;
+            audioCtx = null;
+            mediaStream = null;
+        }
     </script>
 </body>
 </html>

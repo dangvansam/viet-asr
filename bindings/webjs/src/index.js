@@ -1,6 +1,11 @@
-import * as ort from "onnxruntime-web";
 import createVietasrModule from "../dist/vietasr-core.js";
 import { MODEL_BASE_URL } from "../dist/model-config.js";
+
+// onnxruntime-web is resolved lazily inside Pipeline.create() instead of with a
+// static `import` so this module graph carries no bare specifier. That lets the
+// file load inside a Web Worker (which has no import map) when the caller passes
+// an explicit `ortModuleUrl`; bundler/npm users get the default "onnxruntime-web".
+let ort = null;
 
 const INPUT_FRAMES = 43;
 const FEATURE_DIM = 80;
@@ -85,8 +90,24 @@ export class Pipeline {
      * @param {string} [options.modelUrl] base URL for the model assets
      *        (chunks.json, vocab.txt, model.onnx.part*); defaults to the
      *        release pinned on jsDelivr.
+     * @param {string} [options.ortModuleUrl] explicit URL to the onnxruntime-web
+     *        ESM module. Required in a Web Worker (no import map); omit it to
+     *        use the bare "onnxruntime-web" specifier (bundler/npm).
+     * @param {string} [options.ortWasmPaths] directory holding onnxruntime-web's
+     *        own .wasm files; sets ort.env.wasm.wasmPaths when provided.
      */
     static async create(options = {}) {
+        if (!ort) {
+            // Keep the bare specifier a plain string literal so bundlers can
+            // still statically resolve onnxruntime-web for npm consumers; the
+            // dynamic-URL branch is only taken with an explicit ortModuleUrl.
+            const mod = options.ortModuleUrl
+                ? await import(options.ortModuleUrl)
+                : await import("onnxruntime-web");
+            ort = mod.InferenceSession ? mod : (mod.default ?? mod);
+        }
+        if (options.ortWasmPaths) ort.env.wasm.wasmPaths = options.ortWasmPaths;
+
         const wasm = await createVietasrModule();
 
         let unitsText = options.unitsText;
@@ -129,6 +150,42 @@ export class Pipeline {
         this.reset();
         await this._feed(pcm, sampleRate);
         await this._drain();
+        return this._transcript();
+    }
+
+    /**
+     * Begin a streaming session. Clears decoder + encoder state. Call once
+     * before the first pushStream().
+     */
+    startStream() {
+        this.reset();
+    }
+
+    /**
+     * Feed one chunk of live audio. Runs every full encoder window currently
+     * available and leaves the partial tail buffered for the next call.
+     * @param {Float32Array} pcm  audio samples in [-1, 1]
+     * @param {number} sampleRate
+     * @returns {Promise<string>} the transcript so far (normalized partial)
+     */
+    async pushStream(pcm, sampleRate = 16000) {
+        const wasm = this.wasm;
+        await this._feed(pcm, sampleRate);
+        while (wasm.ccall("vietasr_wasm_frames_ready", "number", [], [])
+            >= INPUT_FRAMES) {
+            await this._runChunk(INPUT_FRAMES);
+        }
+        return this._transcript();
+    }
+
+    /**
+     * Flush the buffered tail frames and return the final transcript.
+     * @returns {Promise<string>}
+     */
+    async finishStream() {
+        const tail = this.wasm.ccall(
+            "vietasr_wasm_frames_ready", "number", [], []);
+        if (tail > 0) await this._runChunk(tail);
         return this._transcript();
     }
 

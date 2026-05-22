@@ -22,6 +22,7 @@ SOURCES=(
     "$CORE/src/modules/vietasr/ctc_beam_search.cc"
     "$CORE/src/modules/vietasr/post_processor.cc"
     "$CORE/src/modules/vietasr/units.cc"
+    "$CORE/src/modules/itn/itn_vi.cc"
 )
 
 EXPORTED_FUNCS='["_vietasr_wasm_init","_vietasr_wasm_vocab_size","_vietasr_wasm_reset","_vietasr_wasm_accept_pcm","_vietasr_wasm_frames_ready","_vietasr_wasm_pop_features","_vietasr_wasm_feature_dim","_vietasr_wasm_decode_logits","_vietasr_wasm_transcript","_malloc","_free"]'
