@@ -41,10 +41,9 @@ to WebAssembly.
 { "text": "tôi có 20000₫", "itn": { "applied": true, "lang": "vi" } }
 ```
 
-ITN expects lower-cased text without punctuation (raw ASR output). In the
-`transcribe-rich` preset `itn` currently runs after `punctuation`; since the
-punctuation module is still a stub this is harmless, but `itn` should move
-before `punctuation` once that module does real work.
+ITN expects lower-cased text without punctuation (raw ASR output), so in the
+`transcribe-rich` preset `itn` runs **before** `punctuation` — it rewrites the
+raw ASR transcript, then `punctuation` restores casing and `. , ? !`.
 
 ## Grammar files
 

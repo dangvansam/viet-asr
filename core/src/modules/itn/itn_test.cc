@@ -8,6 +8,7 @@
 
 #include "modules/itn/embedded_itn.h"
 #include "modules/itn/itn.h"
+#include "modules/itn/itn_normalizer.h"
 #include "modules/itn/processor.h"
 #include "vietasr/result.h"
 
@@ -90,6 +91,20 @@ TEST(ItnModule, LeavesPlainTextUnchanged) {
     EXPECT_EQ(builder.CurrentText(), "xin chào bạn");
     const std::string json = builder.SnapshotJson();
     EXPECT_NE(json.find("\"applied\":false"), std::string::npos);
+}
+
+// The fst-free facade the vietasr module uses for per-sentence streaming ITN.
+TEST(ItnNormalizer, FacadeIsAvailable) {
+    EXPECT_TRUE(vietasr::itn::ItnAvailable());
+}
+
+TEST(ItnNormalizer, FacadeNormalizesASentence) {
+    EXPECT_EQ(vietasr::itn::NormalizeText("tôi có hai mươi nghìn đồng"),
+              "tôi có 20000₫");
+}
+
+TEST(ItnNormalizer, FacadeLeavesPlainTextUnchanged) {
+    EXPECT_EQ(vietasr::itn::NormalizeText("xin chào bạn"), "xin chào bạn");
 }
 
 TEST(ItnModule, ClonedInstanceSharesGrammar) {

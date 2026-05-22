@@ -277,6 +277,7 @@ if(VIETASR_MODULE_ITN)
     list(APPEND VIETASR_CORE_SOURCES
         src/modules/itn/itn.cc
         src/modules/itn/processor.cc
+        src/modules/itn/itn_normalizer.cc
         src/modules/itn/embedded_itn.cc
     )
     if(VIETASR_EMBED_ITN)
@@ -342,6 +343,9 @@ if(VIETASR_MODULE_ITN)
     target_include_directories(vietasr_objects SYSTEM PRIVATE
         "${VIETASR_OPENFST_INCLUDE_DIR}")
     target_link_libraries(vietasr_objects PUBLIC fst)
+    # VIETASR_HAS_ITN lets the vietasr module call the ITN normalizer (for
+    # per-sentence ITN while streaming) only when the itn module is built.
+    target_compile_definitions(vietasr_objects PRIVATE VIETASR_HAS_ITN=1)
     if(VIETASR_EMBED_ITN)
         target_compile_definitions(vietasr_objects PRIVATE VIETASR_HAS_EMBEDDED_ITN=1)
     endif()
