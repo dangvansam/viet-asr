@@ -197,10 +197,10 @@ VietASR isn't just ASR. It's a **pipeline of plug-in modules**. Today it transcr
 
 ```python
 pipe = (vietasr.Pipeline()
-    .add("vad")          # voice activity detection
+    .add("vad")          # voice activity detection (tenvad by default)
     .add("vietasr")      # Vietnamese transcription
+    .add("itn")          # "hai mươi nghìn" → "20000"
     .add("punctuation")  # . , ? !
-    .add("itn")          # "hai mươi" → "20"
     .add("gender")       # speaker gender
     .add("emotion")      # tone
     .build())
@@ -219,6 +219,42 @@ One JSON result, optional fields — a field appears only if its module ran:
   "emotion": {"value": "neutral", "score": 0.72}
 }
 ```
+
+---
+
+## 🎙️ Voice activity detection — is there speech?
+
+Sometimes you don't want a transcript — you just need to know **whether audio
+contains speech**: to gate a recorder, skip silent files, or scope ASR to the
+voiced parts. The `vad` preset is a VAD-only pipeline, no ASR:
+
+```python
+r = vietasr.Pipeline.preset("vad").transcribe("clip.wav")
+
+print(r["speech"]["detected"])      # True  — does the audio contain speech?
+print(r["speech"]["voiced_ratio"])  # 0.84  — fraction of the clip that is speech
+print(r["voiced_regions"])          # [{"start": 0.48, "end": 2.53}, ...]
+```
+
+Three interchangeable backends — pick one per call, no rebuild:
+
+| backend | detector | |
+|---|---|---|
+| `tenvad` | TEN-VAD (neural) | accurate — the default; *Powered by ten-vad* |
+| `silero` | Silero VAD v5 (neural) | accurate, MIT-licensed |
+| `energy` | RMS energy | dependency-free, always available |
+
+```python
+pipe = (vietasr.Pipeline()
+    .add("vad", {"backend": "tenvad", "threshold": 0.6, "min_speech_ms": 200})
+    .build())
+```
+
+Every knob — `threshold`, `hangover_ms`, `min_speech_ms`, `min_silence_ms`,
+`speech_pad_ms`, `hop_size` — is configurable; see the
+[vad module docs](core/src/modules/vad/README.md). Both neural models are baked
+into the SDK (no download), and it runs in **batch and streaming** alike —
+`session.partial()` carries the live speech verdict as audio arrives.
 
 ---
 
@@ -356,6 +392,8 @@ Full design: [docs/architecture.md](docs/architecture.md).
 **Shipping now**
 
 - ✅ Streaming + batch Vietnamese ASR
+- ✅ Voice activity detection — speech-or-not classification, 3 backends (Silero / TEN-VAD / energy)
+- ✅ Inverse text normalization — numbers, dates, currency, time (`"hai mươi nghìn đồng"` → `"20000₫"`)
 - ✅ 9 bindings — C, C++, Python, Node.js, Go, Java/Kotlin, C#, Rust, WebAssembly
 - ✅ Android native libraries (arm64 / armv7 / x86_64)
 - ✅ Model bundled in the SDK, zero config
@@ -368,7 +406,6 @@ Full design: [docs/architecture.md](docs/architecture.md).
 - ⏳ iOS / macOS — Swift package + `.xcframework`
 - ⏳ Android `.aar` on Maven Central
 - ⏳ `punctuation` module — restore `. , ? !`
-- ⏳ `itn` module — inverse text normalization (`"hai mươi"` → `20`)
 - ⏳ `diarization` module — who-spoke-when
 - ⏳ `gender` / `emotion` / `dialect` / `noise` modules
 - ⏳ `language-id` + `speaker-id` modules
@@ -392,10 +429,66 @@ No download, no network, no cloud.
 - Streaming Conformer + CTC architecture inspired by [WeNet](https://github.com/wenet-e2e/wenet)
 - Multi-platform binding design inspired by [Vosk](https://github.com/alphacep/vosk-api)
 - Inference via [ONNX Runtime](https://onnxruntime.ai)
+- Voice activity detection via [Silero VAD](https://github.com/snakers4/silero-vad) (MIT)
+  and **Powered by [ten-vad](https://github.com/TEN-framework/ten-vad)**
 
 ## 📄 License
 
 Apache 2.0 for the SDK code. The model has separate terms — see [models/MANIFEST.md](models/MANIFEST.md).
+
+Bundled third-party components keep their own licenses — see
+[Third-party notices](#third-party-notices) below. Note that the optional
+`tenvad` VAD backend (TEN-VAD) carries **Apache-2.0 with additional
+conditions**, including a no-compete clause; build with
+`-DVIETASR_VAD_TENVAD=OFF` to exclude it.
+
+### Third-party notices
+
+VietASR incorporates the third-party components listed below. Each remains
+under its own license.
+
+#### TEN-VAD
+
+- **Used by:** the `tenvad` backend of the `vad` module.
+- **Source:** https://github.com/TEN-framework/ten-vad
+- **Vendored at:** [`core/third_party/ten-vad/`](core/third_party/ten-vad/)
+  (pinned commit in [`COMMIT`](core/third_party/ten-vad/COMMIT); local
+  modifications documented in [`PATCHES.md`](core/third_party/ten-vad/PATCHES.md)).
+- **License:** **Apache License 2.0 with additional conditions** — see
+  [`core/third_party/ten-vad/LICENSE`](core/third_party/ten-vad/LICENSE) and
+  [`core/third_party/ten-vad/NOTICES`](core/third_party/ten-vad/NOTICES).
+
+  > ⚠️ TEN-VAD is **not** plain Apache-2.0. The additional conditions include a
+  > clause prohibiting deployment "in a way that competes with Agora's
+  > offerings", and a requested attribution. Review the LICENSE before
+  > redistributing VietASR with the `tenvad` backend enabled. The backend can
+  > be excluded from the build with `-DVIETASR_VAD_TENVAD=OFF`.
+
+  **Powered by ten-vad.**
+
+  TEN-VAD itself contains code derived from [LPCNet](https://github.com/xiph/LPCNet)
+  (BSD-2-Clause / BSD-3-Clause) — see its `NOTICES` file.
+
+#### Silero VAD
+
+- **Used by:** the `silero` backend of the `vad` module.
+- **Source:** https://github.com/snakers4/silero-vad
+- **Bundled model:** [`core/models/vad/silero_vad.onnx`](core/models/vad/silero_vad.onnx)
+  (Silero VAD v5).
+- **License:** MIT.
+
+#### ONNX Runtime
+
+- **Used by:** the inference engine (all neural modules).
+- **Source:** https://github.com/microsoft/onnxruntime
+- **License:** MIT. Fetched at build time, not vendored.
+
+#### OpenFst
+
+- **Used by:** the `itn` module.
+- **Source:** https://www.openfst.org (CMake-friendly fork:
+  https://github.com/csukuangfj/openfst)
+- **License:** Apache-2.0. Fetched at build time, not vendored.
 
 ---
 
