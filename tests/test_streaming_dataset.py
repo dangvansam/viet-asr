@@ -1,7 +1,7 @@
 import os
 import json
 import torch
-from multitalker_asr.data.streaming import get_multitalker_dataloader
+from multitalker_asr.data import get_multitalker_dataloader
 from loguru import logger
 
 
@@ -57,13 +57,15 @@ def test_streaming_dataloader():
 
     logger.info("Iterating through first batch...")
     for i, batch in enumerate(dataloader):
+        # batch = (padded_audio, audio_lens, padded_text, text_lens, spk_mask, bg_mask)
+        audio, audio_lens, text, text_lens, spk_mask, bg_mask = batch
         logger.success(f"Batch {i} received!")
-        logger.info(f"Audio signal shape: {batch['audio_signal'].shape}")
-        logger.info(f"Audio signal len: {batch['audio_signal_len']}")
-        logger.info(f"Transcripts: {batch['transcripts']}")
+        logger.info(f"Audio shape: {audio.shape}")
+        logger.info(f"Audio lens: {audio_lens}")
+        logger.info(f"Text: {text}")
 
-        assert batch['audio_signal'].shape[0] == 2
-        assert len(batch['transcripts']) == 2
+        assert audio.shape[0] == 2
+        assert len(audio_lens) == 2
 
         if i >= 2:  # Test a few batches
             break

@@ -15,7 +15,11 @@ data
 !src/multitalker_asr/data
 checkpoints/
 models/
+!src/multitalker_asr/models
 spm_bin/
 temp*
+tmp/
 wandb
 .rune/metrics
+.gitnexus
+.claude/
