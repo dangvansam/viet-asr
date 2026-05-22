@@ -1,6 +1,6 @@
 # VietASR
 
-### Offline Vietnamese speech-to-text. One model. Nine language bindings. Zero config.
+### Offline Vietnamese speech-to-text. One model. Ten language bindings. Zero config.
 
 Drop it in, write **three lines**, get a transcript. No API keys, no cloud, no network — the model runs **on-device**, everywhere from a Raspberry Pi to a browser tab.
 
@@ -151,6 +151,22 @@ minSdk 24. The AAR bundles `arm64-v8a`, `armeabi-v7a` and `x86_64`. From git: cl
 </details>
 
 <details>
+<summary>🍎 <b>iOS / macOS</b> — Swift Package</summary>
+
+Swift Package Manager — add the package and `import VietASR`:
+
+```swift
+.package(url: "https://github.com/dangvansam/viet-asr.git", from: "0.1.0")
+```
+
+iOS 13+ / macOS 11+ (runs on every release up to the latest). The package
+ships `CVietASR.xcframework` (iOS device + simulator + macOS), with the ASR
+model and ONNX Runtime baked in. From git:
+clone, then `bash bindings/apple/build-xcframework.sh` and open
+`bindings/apple/Package.swift`. See [bindings/apple/README.md](bindings/apple/README.md).
+</details>
+
+<details>
 <summary>⚙️ <b>C / C++</b> — link <code>libvietasr</code></summary>
 
 ```bash
@@ -233,7 +249,7 @@ One JSON result, optional fields — a field appears only if its module ran:
 | Model size | — | 0.5–3 GB | **66 MB** |
 | Vietnamese tuned | generic | generic | **purpose-built** |
 | Runs in a browser | ❌ | hard | ✅ WASM |
-| Languages / bindings | SDK-limited | Python-first | **9 bindings** |
+| Languages / bindings | SDK-limited | Python-first | **10 bindings** |
 | Setup | API keys, billing | pip + CUDA | **one line** |
 
 Built on a **streaming Conformer + CTC** architecture — the kind that powers real-time captioning in production messaging apps.
@@ -317,7 +333,14 @@ Console.WriteLine(pipe.Transcribe("audio.wav").Text);
 ```js
 import { Pipeline } from "@viet-asr/web";
 const pipe = await Pipeline.create();
+
+// batch
 console.log(await pipe.transcribe(pcmFloat32, 16000));
+
+// streaming — partial captions as you speak ("bốn mươi" → "40" via on-device ITN)
+pipe.startStream();
+const partial = await pipe.pushStream(micChunk, sampleRate);
+const final = await pipe.finishStream();
 ```
 </details>
 
@@ -356,19 +379,19 @@ Full design: [docs/architecture.md](docs/architecture.md).
 **Shipping now**
 
 - ✅ Streaming + batch Vietnamese ASR
-- ✅ 9 bindings — C, C++, Python, Node.js, Go, Java/Kotlin, C#, Rust, WebAssembly
+- ✅ 10 bindings — C, C++, Python, Node.js, Go, Java/Kotlin, C#, Rust, WebAssembly, Swift
 - ✅ Android native libraries (arm64 / armv7 / x86_64)
+- ✅ iOS / macOS — Swift package + `.xcframework`
 - ✅ Model bundled in the SDK, zero config
 - ✅ Any sample rate, mono / stereo
 - ✅ Endpoint-aware segmentation
 - ✅ Thread-safe multi-stream
+- ✅ Browser: live-microphone streaming + inverse text normalization (ITN)
 
 **Coming next**
 
-- ⏳ iOS / macOS — Swift package + `.xcframework`
 - ⏳ Android `.aar` on Maven Central
 - ⏳ `punctuation` module — restore `. , ? !`
-- ⏳ `itn` module — inverse text normalization (`"hai mươi"` → `20`)
 - ⏳ `diarization` module — who-spoke-when
 - ⏳ `gender` / `emotion` / `dialect` / `noise` modules
 - ⏳ `language-id` + `speaker-id` modules

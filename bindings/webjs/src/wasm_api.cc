@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "modules/itn/itn_vi.h"
 #include "modules/vietasr/ctc_beam_search.h"
 #include "modules/vietasr/post_processor.h"
 #include "modules/vietasr/units.h"
@@ -125,6 +126,9 @@ const char* vietasr_wasm_transcript() {
         tokens.push_back(s.units.At(id));
     }
     s.result = s.post.Detokenize(tokens);
+    // Inverse text normalization: spoken numbers -> digits. Applied here so
+    // both streaming partials and the final transcript come back normalized.
+    s.result = vietasr::ApplyItnVietnamese(s.result);
     return s.result.c_str();
 }
 
