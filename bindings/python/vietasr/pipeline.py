@@ -71,6 +71,22 @@ class Pipeline:
         return self
 
     @staticmethod
+    def list_presets() -> list:
+        """Names of the built-in pipeline presets (e.g. "transcribe", "vad")."""
+        raw = native.lib.vietasr_list_presets()
+        if raw == native.ffi.NULL:
+            return []
+        return json.loads(native.ffi.string(raw).decode("utf-8"))
+
+    @staticmethod
+    def list_modules() -> list:
+        """Names of every module that can be added to a custom pipeline."""
+        raw = native.lib.vietasr_list_modules()
+        if raw == native.ffi.NULL:
+            return []
+        return json.loads(native.ffi.string(raw).decode("utf-8"))
+
+    @staticmethod
     def available_execution_providers() -> list:
         """ONNX Runtime execution providers compiled into the loaded native
         library, by canonical name (e.g. "CPUExecutionProvider")."""

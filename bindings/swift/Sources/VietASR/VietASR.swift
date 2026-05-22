@@ -28,6 +28,22 @@ public final class VietASR {
         return String(cString: c)
     }
 
+    /// Pipeline preset names available in the native library
+    /// (e.g. "transcribe", "stream", "batch", "vad").
+    public static var availablePresets: [String] {
+        guard let c = vietasr_list_presets() else { return [] }
+        let json = Data(String(cString: c).utf8)
+        return (try? JSONDecoder().decode([String].self, from: json)) ?? []
+    }
+
+    /// Module names that can be added to a custom pipeline
+    /// (e.g. "vad", "vietasr", "itn").
+    public static var availableModules: [String] {
+        guard let c = vietasr_list_modules() else { return [] }
+        let json = Data(String(cString: c).utf8)
+        return (try? JSONDecoder().decode([String].self, from: json)) ?? []
+    }
+
     private let pipeline: OpaquePointer
 
     /// Builds a pipeline from a preset (e.g. "transcribe", "transcribe-rich").
@@ -49,6 +65,33 @@ public final class VietASR {
             deviceID)
         for module in modules {
             if vietasr_pipeline_add_module(p, module, "{}") != VIETASR_OK {
+                vietasr_pipeline_free(p)
+                return nil
+            }
+        }
+        if vietasr_pipeline_build(p) != VIETASR_OK {
+            vietasr_pipeline_free(p)
+            return nil
+        }
+        pipeline = p
+    }
+
+    /// Builds a pipeline from modules with a per-module JSON config string,
+    /// e.g. `[(name: "vad", config: #"{"backend":"silero"}"#),
+    ///        (name: "vietasr", config: #"{"itn":true,"emit_segments":true}"#)]`.
+    /// Use this when a preset is not enough — to select a VAD backend, enable
+    /// ITN, etc. Pass `"{}"` for a module that needs no config.
+    public init?(configuredModules: [(name: String, config: String)],
+                 executionProvider: ExecutionProvider = .auto,
+                 deviceID: Int32 = 0) {
+        guard let p = vietasr_pipeline_new() else { return nil }
+        _ = vietasr_pipeline_set_execution_provider(
+            p,
+            VietasrExecutionProvider(UInt32(executionProvider.rawValue)),
+            deviceID)
+        for module in configuredModules {
+            if vietasr_pipeline_add_module(
+                    p, module.name, module.config) != VIETASR_OK {
                 vietasr_pipeline_free(p)
                 return nil
             }

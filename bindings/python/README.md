@@ -38,7 +38,7 @@ with pipe.stream(sample_rate=16000) as session:
 
 ```python
 pipe = (vietasr.Pipeline.new()
-    .add("vad")
+    .add("vad", {"backend": "tenvad"})  # default — or "silero" / "energy"
     .add("vietasr")
     .add("punctuation")
     .add("itn")
