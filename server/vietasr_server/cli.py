@@ -15,9 +15,11 @@ def main() -> int:
     parser.add_argument("--host", default="0.0.0.0", help="bind address (default: 0.0.0.0)")
     parser.add_argument("--port", type=int, default=8000, help="bind port (default: 8000)")
     parser.add_argument("--preset", default="transcribe",
-                        help="pipeline preset (default: transcribe)")
+                        help="default pipeline preset (default: transcribe); "
+                             "requests may select any preset or module set")
     parser.add_argument("--module", action="append", default=[], metavar="NAME",
-                        help="build a custom pipeline from modules (overrides --preset)")
+                        help="default custom pipeline from modules (overrides "
+                             "--preset)")
     parser.add_argument("--log-level", default="info",
                         choices=["critical", "error", "warning", "info", "debug", "trace"],
                         help="uvicorn log level (default: info)")
@@ -28,14 +30,16 @@ def main() -> int:
     import uvicorn
 
     from vietasr_server.app import create_app
-    from vietasr_server.asr import AsrEngine
+    from vietasr_server.asr import EngineRegistry
 
     print(f"vietasr-server {__version__} — loading model ...", flush=True)
-    engine = AsrEngine(preset=args.preset, modules=args.module or None)
-    app = create_app(engine)
+    registry = EngineRegistry(default_preset=args.preset,
+                              default_modules=args.module or None)
+    app = create_app(registry)
 
-    print(f"  pipeline : {engine.description}", flush=True)
-    print(f"  runtime  : {engine.active_execution_provider()}", flush=True)
+    print(f"  pipeline : {registry.default.description} (default)", flush=True)
+    print(f"  runtime  : {registry.default.active_execution_provider()}", flush=True)
+    print(f"  console  : http://{args.host}:{args.port}/", flush=True)
     print(f"  REST     : http://{args.host}:{args.port}/v1/audio/transcriptions", flush=True)
     print(f"  WebSocket: ws://{args.host}:{args.port}/v1/stream", flush=True)
 

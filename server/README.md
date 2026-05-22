@@ -56,9 +56,12 @@ vietasr-server                      # -> http://0.0.0.0:8000
 
 ## Test console
 
-Open **`http://localhost:8000/`** in a browser — a built-in page to try both
-endpoints: upload a file (batch), or record from the mic / stream a file
-(WebSocket) and watch partial transcripts live.
+Open **`http://localhost:8000/`** in a browser — a built-in page to exercise
+every feature: pick a pipeline (a preset, or a custom module set to test one
+model on its own), then run it in **batch** (upload a file) or **streaming**
+(record from the mic / stream a file) mode. Each run shows the full module
+result JSON — `text`, `voiced_regions`, `speech`, `itn`, `segments`, … —
+so all module outputs are visible.
 
 ## Endpoints
 
@@ -67,8 +70,25 @@ endpoints: upload a file (batch), or record from the mic / stream a file
 | `GET`  | `/` | Browser test console |
 | `POST` | `/v1/audio/transcriptions` | Batch transcription (OpenAI-compatible) |
 | `WS`   | `/v1/stream` | Streaming transcription |
+| `GET`  | `/v1/pipelines` | List selectable presets + modules |
 | `GET`  | `/v1/models` | List models (OpenAI-compatible) |
 | `GET`  | `/health` | Liveness probe |
+
+## Selecting a pipeline
+
+Every request can pick the pipeline to run — a built-in **preset**
+(`transcribe`, `transcribe-rich`, `stream`, `vad`, `meeting`, `analytics`) or a
+**custom set of modules** (`vad`, `vietasr`, `itn`, `punctuation`, …) to
+exercise one model on its own. `GET /v1/pipelines` lists what is available.
+Engines are built on first use and cached, so the first request for a new
+pipeline is slower. With no selection, the server default (`--preset` /
+`--module`) runs.
+
+The **`stream`** preset is the recommended pipeline for streaming — ASR-only,
+no separate VAD model. The CTC endpointer segments on silence; the ASR emits
+`voiced_regions` + `speech` (from CTC-blank), a per-sentence `segments[]` array
+(`text` + `start`/`end`), and ITN-normalizes each sentence the moment it ends —
+all while the encoder cache keeps streaming. `text` is the running aggregate.
 
 ## Batch — OpenAI-compatible
 
@@ -79,9 +99,23 @@ curl http://localhost:8000/v1/audio/transcriptions \
 # {"text":"xin chào, bạn nghe rõ không"}
 ```
 
-`response_format` accepts `json` (default), `text`, `verbose_json`.
-WAV (16-bit PCM) works out of the box; other formats (mp3, m4a, flac, …)
+`response_format` accepts `json` (default), `text`, `verbose_json` — the last
+returns the full module payload (`voiced_regions`, `speech`, `itn`, `segments`,
+…). WAV (16-bit PCM) works out of the box; other formats (mp3, m4a, flac, …)
 need `ffmpeg` on PATH (already in the Docker image).
+
+Add `-F pipeline=NAME` to run a preset, or `-F modules=vad,vietasr,itn` to run
+a custom module set:
+
+```bash
+curl http://localhost:8000/v1/audio/transcriptions \
+  -F file=@audio.wav -F response_format=verbose_json -F pipeline=vad
+```
+
+**Long audio** — `-F vad_segment=auto|on|off` (default `auto`). When it applies,
+the server runs a neural VAD first, cuts the audio into ≤60 s pieces at silence
+boundaries, transcribes each, and merges — skipping silence and avoiding the
+encoder's ~3.6 min length limit. `auto` segments clips longer than 3 minutes.
 
 Works with the OpenAI SDK by pointing `base_url` at the server:
 
@@ -95,13 +129,15 @@ with open("audio.wav", "rb") as f:
 ## Streaming — WebSocket
 
 Connect to `ws://localhost:8000/v1/stream?sample_rate=16000&encoding=pcm_s16le`.
+Add `&pipeline=NAME` or `&modules=vad,vietasr` to pick the pipeline.
 
 - **Client → server:** binary messages of raw PCM
   (`pcm_s16le` default, or `pcm_f32le`).
 - **Server → client:** JSON — `{"type":"ready",...}` once, then
-  `{"type":"partial","text":...}` per chunk.
+  `{"type":"partial","text":...,"result":{...}}` per chunk. `result` carries
+  the full live module payload.
 - Send a text message `{"type":"eof"}` to finish; the server replies with
-  `{"type":"final","text":...,"is_final":true}` and closes.
+  `{"type":"final","text":...,"result":{...},"is_final":true}` and closes.
 
 A ready-made client is in [examples/ws_client.py](examples/ws_client.py):
 
@@ -116,5 +152,8 @@ vietasr-server [--host H] [--port P] [--preset NAME] [--module NAME ...]
                [--log-level LEVEL]
 ```
 
-- `--preset` — pipeline preset (default `transcribe`).
-- `--module` — build a custom pipeline (repeatable; overrides `--preset`).
+- `--preset` — the **default** pipeline preset (default `transcribe`).
+- `--module` — default custom pipeline (repeatable; overrides `--preset`).
+
+Both set the server default only — any request may still select any preset or
+module set via the `pipeline` / `modules` parameters.
