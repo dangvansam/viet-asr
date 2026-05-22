@@ -56,6 +56,43 @@ TEST(Pipeline, TranscribePresetReturnsJson) {
     vietasr_pipeline_free(pipeline);
 }
 
+TEST(Pipeline, StreamPresetEmitsVoicedRegionsFromAsr) {
+    // The `stream` preset is vietasr-only; the ASR itself emits voiced_regions
+    // + speech (derived from CTC-blank) — no separate VAD module.
+    VietasrPipeline* pipeline = vietasr_pipeline_preset("stream");
+    ASSERT_NE(pipeline, nullptr);
+
+    short pcm[16000] = {0};
+    for (int i = 0; i < 16000; ++i) {
+        pcm[i] = static_cast<short>((i % 2000) - 1000);
+    }
+    const char* result = vietasr_transcribe_buffer(pipeline, pcm, 16000, 16000.0f);
+    ASSERT_NE(result, nullptr);
+    std::string json = result;
+    EXPECT_TRUE(Contains(json, "voiced_regions"));
+    EXPECT_TRUE(Contains(json, "speech"));
+    vietasr_pipeline_free(pipeline);
+}
+
+TEST(Pipeline, BatchPresetSurfacesVadAndSegments) {
+    // The `batch` preset = Silero VAD + ASR; the result carries voiced_regions
+    // + speech (from the vad module) and a per-sentence segments[] array.
+    VietasrPipeline* pipeline = vietasr_pipeline_preset("batch");
+    ASSERT_NE(pipeline, nullptr);
+
+    short pcm[16000] = {0};
+    for (int i = 0; i < 16000; ++i) {
+        pcm[i] = static_cast<short>((i % 2000) - 1000);
+    }
+    const char* result = vietasr_transcribe_buffer(pipeline, pcm, 16000, 16000.0f);
+    ASSERT_NE(result, nullptr);
+    std::string json = result;
+    EXPECT_TRUE(Contains(json, "voiced_regions"));
+    EXPECT_TRUE(Contains(json, "speech"));
+    EXPECT_TRUE(Contains(json, "segments"));
+    vietasr_pipeline_free(pipeline);
+}
+
 TEST(Pipeline, AnalyticsPresetSurfacesAllModuleFields) {
     VietasrPipeline* pipeline = vietasr_pipeline_preset("analytics");
     ASSERT_NE(pipeline, nullptr);

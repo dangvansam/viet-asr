@@ -6,12 +6,63 @@ Vietnamese ASR module: streaming Conformer encoder + CTC prefix beam search.
 
 ```json
 {
-  "text":     "xin chào bạn",
-  "partial":  "xin chào",
+  "text":     "tôi có 20000₫. lúc 8:30",
+  "partial":  "lúc 8:30",
   "is_final": true,
-  "segments": [{"start": 0.0, "end": 1.2, "text": "xin chào bạn", "confidence": 0.94}]
+  "segments": [
+    {"text": "tôi có 20000₫", "start": 0.0,  "end": 1.84},
+    {"text": "lúc 8:30",       "start": 2.40, "end": 3.52}
+  ],
+  "voiced_regions": [{"start": 0.0, "end": 1.84}, {"start": 2.40, "end": 3.52}],
+  "speech": {"detected": true, "voiced_ratio": 0.86, ...}
 }
 ```
+
+- **`text`** — the running aggregate transcript of the whole stream, start to end.
+- **`segments`** — one entry per sentence ("chunk"): `text` (ITN-normalized when
+  `itn` is on) + `start` / `end` time. Emitted when `emit_segments` is on.
+- **`voiced_regions` / `speech`** — emitted when `emit_voiced_regions` is on
+  (see below).
+
+## Configuration
+
+Pass a JSON object to `pipeline.add("vietasr", {...})`:
+
+| Field | Type | Default | Effect |
+|---|---|---|---|
+| `pause_punctuation` | bool | `true` | Insert sentence/clause punctuation at speech pauses |
+| `sentence_pause_ms` | int | `1500` | Silence gap ≥ this between utterances → `.` |
+| `clause_pause_ms` | int | `500` | Silence gap ≥ this (and `< sentence_pause_ms`) → `,` |
+| `emit_segments` | bool | `false` | Emit the per-sentence `segments[]` array |
+| `emit_voiced_regions` | bool | `false` | Emit `voiced_regions` + `speech` (from CTC-blank) |
+| `itn` | bool | `false` | ITN-normalize each sentence as it ends |
+
+The **`stream`** preset turns all three on — see below.
+
+**Streaming sentences + per-sentence ITN.** The CTC endpoint detector commits a
+sentence at every pause. With `emit_segments`, each committed sentence is added
+to `segments[]` with its start/end time; with `itn`, that sentence is
+inverse-text-normalized *the moment it ends* (`"hai mươi nghìn đồng"` →
+`"20000₫"`). ITN touches only the committed text — the encoder/beam caches are
+untouched, so the rest of the stream continues uninterrupted. `text` is the
+running aggregate of all sentences. (`itn` is ignored if the `itn` module was
+not built into the library.)
+
+**Pause-driven punctuation.** The CTC endpoint detector already splits speech
+into utterances at every pause. Each utterance records how long the silence
+before it lasted; when the transcript is assembled, a long pause becomes `. `
+and a shorter one `, ` (anything below `clause_pause_ms`, just a space):
+
+```
+"em đi học"  +  2.0 s pause  +  "anh ở nhà"   ->  "em đi học. anh ở nhà"
+"hôm nay"    +  1.1 s pause  +  "trời đẹp"     ->  "hôm nay, trời đẹp"
+```
+
+Set `pause_punctuation: false` to disable it — utterances are then
+newline-joined (legacy behavior). Note the endpoint detector only cuts on
+silences ≳ 1 s, so this marks sentence and long-clause boundaries, not every
+brief breath. It runs entirely inside the ASR step, so the punctuated text
+flows straight into downstream modules such as `itn`.
 
 ## Pipeline contribution
 

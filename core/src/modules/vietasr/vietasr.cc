@@ -6,8 +6,13 @@
 #include <string>
 
 #include "embedded_model.h"
+#include "utils/json.h"
 #include "vietasr/engine.h"
 #include "vietasr/logger.h"
+
+#if VIETASR_HAS_ITN
+#include "modules/itn/itn_normalizer.h"  // per-sentence ITN (fst-free facade)
+#endif
 
 namespace vietasr {
 
@@ -27,6 +32,16 @@ constexpr int kBlankId = 0;
 constexpr int kFrameMs = 40;
 constexpr float kBlankThreshold = 0.8f;
 
+// The encoder's positional-encoding table is a fixed [5040, 448] initializer.
+// Each chunk indexes a 50-wide span [encoder_offset, encoder_offset+49] into
+// it, so a stream is bounded to ~5040 output frames (~3.6 min) before the
+// index overflows. RunOneChunk() re-anchors the streaming caches before that
+// limit, keeping arbitrarily long / live streams working.
+constexpr int kEncoderPosTableLen = 5040;
+constexpr int kEncoderPosWindow = 50;
+constexpr int kMaxEncoderOffset =
+    kEncoderPosTableLen - kEncoderPosWindow - kOutputFrames;  // 4980
+
 std::size_t AttCacheSize() {
     return 1ull * kNumLayers * kAttHeads * kAttCacheLen * kAttCacheDim;
 }
@@ -35,6 +50,40 @@ std::size_t CnnCacheSize() {
     return 1ull * kNumLayers * kCnnCacheW * kCnnCacheH;
 }
 
+// Maps a silence gap to the joiner text placed before the next utterance.
+std::string PauseSeparator(int pause_ms, bool pause_punctuation,
+                           int sentence_pause_ms, int clause_pause_ms) {
+    if (!pause_punctuation) return "\n";
+    if (pause_ms >= sentence_pause_ms) return ". ";
+    if (pause_ms >= clause_pause_ms) return ", ";
+    return " ";
+}
+
+}
+
+std::string ApplyPausePunctuation(const std::vector<AsrSegment>& segments,
+                                  const std::string& partial,
+                                  int partial_lead_pause_ms,
+                                  bool pause_punctuation,
+                                  int sentence_pause_ms,
+                                  int clause_pause_ms) {
+    std::string out;
+    for (const auto& seg : segments) {
+        if (seg.text.empty()) continue;
+        if (!out.empty()) {
+            out += PauseSeparator(seg.lead_pause_ms, pause_punctuation,
+                                  sentence_pause_ms, clause_pause_ms);
+        }
+        out += seg.text;
+    }
+    if (!partial.empty()) {
+        if (!out.empty()) {
+            out += PauseSeparator(partial_lead_pause_ms, pause_punctuation,
+                                  sentence_pause_ms, clause_pause_ms);
+        }
+        out += partial;
+    }
+    return out;
 }
 
 VietAsrModule::VietAsrModule() = default;
@@ -57,15 +106,56 @@ std::unique_ptr<Module> VietAsrModule::Clone() const {
     copy->total_frames_ = 0;
     copy->has_decoded_ = false;
     copy->completed_segments_.clear();
+    copy->completed_join_.clear();
+    copy->pause_run_frames_ = 0;
+    copy->lead_pause_ms_ = 0;
+    copy->pause_punctuation_ = pause_punctuation_;
+    copy->sentence_pause_ms_ = sentence_pause_ms_;
+    copy->clause_pause_ms_ = clause_pause_ms_;
+    copy->emit_voiced_regions_ = emit_voiced_regions_;
+    copy->emit_segments_ = emit_segments_;
+    copy->itn_ = itn_;
+    copy->output_frame_clock_ = 0;
+    copy->utt_start_frame_ = 0;
+    copy->utt_last_speech_frame_ = 0;
     return copy;
 }
 
 Status VietAsrModule::Init(const ModuleConfig& config,
                          ModelManager* models,
                          Engine* engine) {
-    (void)config;
     (void)models;
     engine_ = engine;
+
+    // Pause-driven punctuation config (consumed by ApplyPausePunctuation).
+    bool cfg_flag = true;
+    double cfg_num = 0.0;
+    if (JsonGetBool(config.json, "pause_punctuation", &cfg_flag))
+        pause_punctuation_ = cfg_flag;
+    if (JsonGetNumber(config.json, "sentence_pause_ms", &cfg_num))
+        sentence_pause_ms_ = static_cast<int>(cfg_num);
+    if (JsonGetNumber(config.json, "clause_pause_ms", &cfg_num))
+        clause_pause_ms_ = static_cast<int>(cfg_num);
+    if (sentence_pause_ms_ < 0) sentence_pause_ms_ = 0;
+    if (clause_pause_ms_ < 0) clause_pause_ms_ = 0;
+    // Opt-in: emit voiced_regions + speech from the CTC-blank endpointer, so a
+    // streaming vietasr-only pipeline needs no separate VAD model.
+    if (JsonGetBool(config.json, "emit_voiced_regions", &cfg_flag))
+        emit_voiced_regions_ = cfg_flag;
+    // Opt-in: emit the per-sentence segments[] array (text + start/end).
+    if (JsonGetBool(config.json, "emit_segments", &cfg_flag))
+        emit_segments_ = cfg_flag;
+    // Opt-in: ITN-normalize each sentence as it is committed (needs the itn
+    // module — quietly ignored if it was not built into this library).
+    if (JsonGetBool(config.json, "itn", &cfg_flag))
+        itn_ = cfg_flag;
+#if !VIETASR_HAS_ITN
+    if (itn_) {
+        VIETASR_LOG_WARN("vietasr")
+            << "itn=true but the itn module is not built; ignoring";
+        itn_ = false;
+    }
+#endif
 
     features_ = std::make_unique<FeaturePipeline>();
     beam_search_ = std::make_unique<CtcBeamSearch>(CtcBeamSearchConfig{10, kBlankId});
@@ -77,9 +167,15 @@ Status VietAsrModule::Init(const ModuleConfig& config,
     cnn_cache_.assign(CnnCacheSize(), 0.0f);
     encoder_offset_ = 0;
     completed_segments_.clear();
+    completed_join_.clear();
     silence_frames_ = 0;
     total_frames_ = 0;
     has_decoded_ = false;
+    pause_run_frames_ = 0;
+    lead_pause_ms_ = 0;
+    output_frame_clock_ = 0;
+    utt_start_frame_ = 0;
+    utt_last_speech_frame_ = 0;
 
     EmbeddedBlob vocab = EmbeddedAsrVocab();
     if (vocab.empty()) {
@@ -127,9 +223,15 @@ void VietAsrModule::Reset() {
     std::fill(att_cache_.begin(), att_cache_.end(), 0.0f);
     std::fill(cnn_cache_.begin(), cnn_cache_.end(), 0.0f);
     completed_segments_.clear();
+    completed_join_.clear();
     silence_frames_ = 0;
     total_frames_ = 0;
     has_decoded_ = false;
+    pause_run_frames_ = 0;
+    lead_pause_ms_ = 0;
+    output_frame_clock_ = 0;
+    utt_start_frame_ = 0;
+    utt_last_speech_frame_ = 0;
 }
 
 void VietAsrModule::OnFrame(const AudioFrame& frame, ResultBuilder* out) {
@@ -148,6 +250,8 @@ void VietAsrModule::OnFrame(const AudioFrame& frame, ResultBuilder* out) {
             out->SetPartial(current);
             out->SetText("vietasr", current);
         }
+        if (emit_voiced_regions_) EmitVoicedRegions(out);
+        if (emit_segments_) EmitSegments(out);
     }
 }
 
@@ -162,11 +266,87 @@ void VietAsrModule::OnFinalize(ResultBuilder* out) {
         return;
     }
     Flush();
+    // Commit the trailing in-progress utterance so the final segments[] /
+    // transcript cover the whole stream end to end.
+    CommitCurrentBeamAsSegment();
     out->SetText("vietasr", BuildTranscript());
+    if (emit_voiced_regions_) EmitVoicedRegions(out);
+    if (emit_segments_) EmitSegments(out);
+}
+
+// The per-sentence segments[] array: each committed chunk with its
+// (ITN-normalized) text and start/end time — the streaming "result per chunk".
+void VietAsrModule::EmitSegments(ResultBuilder* out) const {
+    JsonWriter writer;
+    writer.BeginArray();
+    for (const auto& seg : completed_segments_) {
+        writer.BeginObject();
+        writer.Key("text").String(seg.text);
+        writer.Key("start").Number(seg.start_s);
+        writer.Key("end").Number(seg.end_s);
+        writer.EndObject();
+    }
+    writer.EndArray();
+    out->SetField("segments", writer.Str());
+}
+
+// Voiced regions + speech derived from the CTC-blank endpointer: each utterance
+// (a speech run between endpoints) is one region. Lets a streaming vietasr-only
+// pipeline report speech activity without a separate VAD model.
+void VietAsrModule::EmitVoicedRegions(ResultBuilder* out) const {
+    std::vector<std::pair<double, double>> regions;
+    regions.reserve(completed_segments_.size() + 1);
+    for (const auto& seg : completed_segments_) {
+        regions.emplace_back(seg.start_s, seg.end_s);
+    }
+    // The current, not-yet-committed utterance.
+    if (has_decoded_ && utt_last_speech_frame_ >= utt_start_frame_) {
+        regions.emplace_back(
+            static_cast<double>(utt_start_frame_) * kFrameMs / 1000.0,
+            static_cast<double>(utt_last_speech_frame_) * kFrameMs / 1000.0);
+    }
+    const double total_s =
+        static_cast<double>(output_frame_clock_) * kFrameMs / 1000.0;
+
+    JsonWriter regions_json;
+    regions_json.BeginArray();
+    double voiced_s = 0.0;
+    for (const auto& r : regions) {
+        regions_json.BeginObject();
+        regions_json.Key("start").Number(r.first);
+        regions_json.Key("end").Number(r.second);
+        regions_json.EndObject();
+        if (r.second > r.first) voiced_s += r.second - r.first;
+    }
+    regions_json.EndArray();
+    out->SetField("voiced_regions", regions_json.Str());
+
+    double ratio = total_s > 0.0 ? voiced_s / total_s : 0.0;
+    if (ratio > 1.0) ratio = 1.0;
+    JsonWriter speech;
+    speech.BeginObject();
+    speech.Key("detected").Boolean(!regions.empty());
+    speech.Key("voiced_ratio").Number(ratio);
+    speech.Key("voiced_duration_s").Number(voiced_s);
+    speech.Key("total_duration_s").Number(total_s);
+    speech.EndObject();
+    out->SetField("speech", speech.Str());
 }
 
 void VietAsrModule::RunOneChunk() {
     if (!engine_ || !features_ || !beam_search_) return;
+
+    // Re-anchor the encoder before its positional-encoding index would overrun
+    // the fixed [5040, 448] table. Zeroing the caches alongside the offset is
+    // required: the offset is the absolute position of the cached frames, so
+    // the two must reset together. The decoder/beam continues uninterrupted.
+    if (encoder_offset_ >= kMaxEncoderOffset) {
+        std::fill(att_cache_.begin(), att_cache_.end(), 0.0f);
+        std::fill(cnn_cache_.begin(), cnn_cache_.end(), 0.0f);
+        encoder_offset_ = 0;
+        VIETASR_LOG_DEBUG("vietasr")
+            << "encoder re-anchored (positional-encoding limit reached)";
+    }
 
     std::vector<float> frames = features_->PopFrames(kInputFrames);
     if (static_cast<int>(frames.size()) != kInputFrames * kFeatureDim) return;
@@ -220,6 +400,7 @@ void VietAsrModule::RunOneChunk() {
 void VietAsrModule::ProcessFrameEndpoint(const float* logits, int vocab_dim) {
     if (!endpoint_) return;
     total_frames_ += 1;
+    output_frame_clock_ += 1;
 
     float m = logits[0];
     for (int i = 1; i < vocab_dim; ++i) {
@@ -234,8 +415,19 @@ void VietAsrModule::ProcessFrameEndpoint(const float* logits, int vocab_dim) {
     double blank_prob = std::exp(blank_logp);
     if (blank_prob > static_cast<double>(kBlankThreshold)) {
         silence_frames_ += 1;
+        pause_run_frames_ += 1;
     } else {
+        // First speech frame of a new utterance: the silence run that just
+        // ended is this utterance's lead-in pause. pause_run_frames_ spans the
+        // whole gap — unlike silence_frames_ it is not reset by the endpoint
+        // commit that happened mid-pause.
+        if (!has_decoded_) {
+            lead_pause_ms_ = pause_run_frames_ * kFrameMs;
+            utt_start_frame_ = output_frame_clock_;
+        }
+        utt_last_speech_frame_ = output_frame_clock_;
         silence_frames_ = 0;
+        pause_run_frames_ = 0;
         has_decoded_ = true;
     }
 
@@ -257,10 +449,23 @@ void VietAsrModule::CommitCurrentBeamAsSegment() {
     }
     std::string text = post_processor_.Detokenize(tokens);
     if (!text.empty()) {
-        completed_segments_.push_back(std::move(text));
-        if (completed_segments_.size() > 4) {
-            completed_segments_.erase(completed_segments_.begin());
-        }
+#if VIETASR_HAS_ITN
+        // Sentence end reached — ITN-normalize this sentence now. This touches
+        // only the committed text; the encoder/beam caches are untouched, so
+        // the rest of the stream continues uninterrupted.
+        if (itn_) text = itn::NormalizeText(text);
+#endif
+        const double start_s =
+            static_cast<double>(utt_start_frame_) * kFrameMs / 1000.0;
+        const double end_s =
+            static_cast<double>(utt_last_speech_frame_) * kFrameMs / 1000.0;
+        completed_segments_.push_back(
+            AsrSegment{std::move(text), lead_pause_ms_, start_s, end_s});
+        // Refresh the cached join of all completed sentences (used by
+        // BuildTranscript so the per-frame cost stays O(partial), not O(n)).
+        completed_join_ = ApplyPausePunctuation(
+            completed_segments_, "", 0, pause_punctuation_,
+            sentence_pause_ms_, clause_pause_ms_);
     }
     beam_search_->Reset();
     silence_frames_ = 0;
@@ -308,25 +513,25 @@ void VietAsrModule::Flush() {
 }
 
 std::string VietAsrModule::BuildTranscript() const {
-    std::string out;
-    for (const auto& seg : completed_segments_) {
-        if (!out.empty()) out.push_back('\n');
-        out += seg;
+    std::string partial;
+    if (beam_search_) {
+        std::vector<int> ids = beam_search_->Hypothesis();
+        std::vector<std::string> tokens;
+        tokens.reserve(ids.size());
+        for (int id : ids) {
+            if (id == kBlankId) continue;
+            tokens.push_back(units_.At(id));
+        }
+        partial = post_processor_.Detokenize(tokens);
     }
-    if (!beam_search_) return out;
-    std::vector<int> ids = beam_search_->Hypothesis();
-    std::vector<std::string> tokens;
-    tokens.reserve(ids.size());
-    for (int id : ids) {
-        if (id == kBlankId) continue;
-        tokens.push_back(units_.At(id));
-    }
-    std::string partial = post_processor_.Detokenize(tokens);
-    if (!partial.empty()) {
-        if (!out.empty()) out.push_back('\n');
-        out += partial;
-    }
-    return out;
+    // completed_join_ caches the join of all committed sentences (refreshed on
+    // each commit); only the in-progress partial is appended here.
+    if (partial.empty()) return completed_join_;
+    if (completed_join_.empty()) return partial;
+    return completed_join_
+         + PauseSeparator(lead_pause_ms_, pause_punctuation_,
+                          sentence_pause_ms_, clause_pause_ms_)
+         + partial;
 }
 
 VIETASR_REGISTER_MODULE("vietasr", VietAsrModule)
