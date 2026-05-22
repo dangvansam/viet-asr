@@ -88,10 +88,41 @@ jobs:
           path: dist-natives/*.tar.gz
           if-no-files-found: error
 
+  # ── Apple (iOS + macOS) Swift Package xcframework ─────────────────────────
+  build-apple:
+    name: native (apple-xcframework)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build CVietASR.xcframework
+        run: bash bindings/apple/build-xcframework.sh
+
+      - name: Verify Swift package (macOS host)
+        working-directory: bindings/apple
+        run: swift test
+
+      - name: Package xcframework + checksum
+        working-directory: bindings/apple
+        run: |
+          ( cd artifacts && zip -qry CVietASR.xcframework.zip CVietASR.xcframework )
+          swift package compute-checksum artifacts/CVietASR.xcframework.zip \
+            | tee artifacts/CVietASR.xcframework.zip.sha256
+          ls -la artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          # native-* so the github-release job picks it up automatically.
+          name: native-apple
+          path: |
+            bindings/apple/artifacts/CVietASR.xcframework.zip
+            bindings/apple/artifacts/CVietASR.xcframework.zip.sha256
+          if-no-files-found: error
+
   # ── Cut the GitHub Release and attach the native + model assets ───────────
   github-release:
     name: GitHub Release
-    needs: build-natives
+    needs: [build-natives, build-apple]
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
@@ -124,13 +155,33 @@ jobs:
               chunks.json vocab.txt model.onnx.part* )
           ls -la assets
 
+      - name: Stamp Apple Package.swift (release URL + checksum)
+        # The Swift package's binary target points at this run's xcframework
+        # asset. Commit it so the release tag (created below) carries a
+        # Package.swift that `.package(url:)` consumers can resolve directly.
+        if: github.ref_name == 'sdk'
+        run: |
+          checksum="$(cat assets/CVietASR.xcframework.zip.sha256)"
+          python3 scripts/stamp-apple-package.py "${{ steps.ver.outputs.version }}" "$checksum"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet bindings/apple/Package.swift; then
+            echo "Package.swift already current"
+          else
+            git add bindings/apple/Package.swift
+            git commit -m "release: stamp Apple Package.swift for v${{ steps.ver.outputs.version }}"
+            git push origin HEAD:sdk
+          fi
+
       - name: Create / update Release
         if: github.ref_type == 'tag' || github.ref_name == 'sdk'
         uses: softprops/action-gh-release@v2
         with:
-          # On the sdk branch this creates the tag too; tags pushed by
-          # GITHUB_TOKEN do not re-trigger this workflow.
+          # On the sdk branch this creates the tag too, at the current branch
+          # tip — i.e. the stamped Package.swift commit pushed just above.
+          # Tags pushed by GITHUB_TOKEN do not re-trigger this workflow.
           tag_name: v${{ steps.ver.outputs.version }}
+          target_commitish: ${{ github.ref_name }}
           prerelease: ${{ github.ref_type != 'tag' }}
           files: assets/*
           fail_on_unmatched_files: true

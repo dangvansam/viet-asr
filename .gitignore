@@ -65,3 +65,10 @@ bindings/android/.build-*/
 nupkg/
 wheelhouse/
 dist-natives/
+
+# Apple (Swift Package) — xcframeworks are built locally / hosted on Releases
+bindings/apple/artifacts/
+.build/
+.swiftpm/
+.xcbuild/
+*.xcframework
