@@ -1,15 +1,24 @@
 {
   "module": "vad",
-  "version": "1",
-  "description": "Silero VAD v5 — 32 ms / 16 kHz",
-  "license": "MIT",
-  "sample_rate": 16000,
+  "version": "2",
+  "description": "VAD models — Silero VAD v5 and TEN-VAD. Both are embedded into libvietasr at build time (see core/cmake/EmbedVadModel.cmake); this manifest is informational.",
   "files": [
     {
       "name": "silero_vad.onnx",
-      "url":  "https://cdn.vietasr.io/vad/1/silero_vad.onnx",
-      "md5":  "TODO_REPLACE_WITH_REAL_MD5_AFTER_UPLOAD",
-      "size_bytes": 1762400
+      "license": "MIT",
+      "source": "https://github.com/snakers4/silero-vad",
+      "md5": "302cb198a7bb0400c62b73db2942737f",
+      "size_bytes": 2327524,
+      "embedded": true,
+      "embedded_path": "core/models/vad/silero_vad.onnx"
+    },
+    {
+      "name": "ten-vad.onnx",
+      "license": "Apache-2.0 with additional conditions",
+      "source": "https://github.com/TEN-framework/ten-vad",
+      "size_bytes": 315449,
+      "embedded": true,
+      "embedded_path": "core/third_party/ten-vad/src/onnx_model/ten-vad.onnx"
     }
   ]
 }

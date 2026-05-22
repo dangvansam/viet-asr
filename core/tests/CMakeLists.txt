@@ -41,3 +41,8 @@ if(VIETASR_MODULE_ITN)
     vietasr_add_test(test_itn ../src/modules/itn/itn_test.cc)
     gtest_discover_tests(test_itn)
 endif()
+
+if(VIETASR_MODULE_VAD)
+    vietasr_add_test(test_vad test_vad.cc)
+    gtest_discover_tests(test_vad)
+endif()

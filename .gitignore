@@ -45,6 +45,10 @@ vocab.txt
 !models/vietasr/chunks.json
 !models/vietasr/vocab.txt
 
+# Bundled VAD models: small enough to commit whole, embedded into libvietasr.
+!core/models/vad/silero_vad.onnx
+!core/third_party/ten-vad/src/onnx_model/ten-vad.onnx
+
 .env
 .env.local
 *.log

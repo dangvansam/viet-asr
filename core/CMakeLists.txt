@@ -149,6 +149,13 @@ option(VIETASR_MODULE_NOISE        "Build noise module (Phase 17 stub)" ON)
 option(VIETASR_EMBED_MODEL "Embed the vietasr model into libvietasr at build time" ON)
 option(VIETASR_EMBED_ITN   "Embed the Vietnamese ITN grammar into libvietasr" ON)
 
+# vad-module backends. The neural backends additionally require ONNX Runtime;
+# they auto-disable (with the energy backend remaining) when it is unavailable.
+option(VIETASR_VAD_TENVAD   "Build the TEN-VAD backend of the vad module" ON)
+option(VIETASR_VAD_SILERO   "Build the Silero VAD backend of the vad module" ON)
+option(VIETASR_EMBED_TENVAD "Embed ten-vad.onnx into libvietasr"   ON)
+option(VIETASR_EMBED_SILERO "Embed silero_vad.onnx into libvietasr" ON)
+
 # ---------------------------------------------------------------------------
 # OpenFst — required by the itn module's WFST inverse text normalizer. We use
 # a CMake-friendly fork (the one sherpa-onnx ships, including to WebAssembly),
@@ -267,7 +274,81 @@ if(VIETASR_MODULE_VIETASR)
 endif()
 
 if(VIETASR_MODULE_VAD)
-    list(APPEND VIETASR_CORE_SOURCES src/modules/vad/vad.cc)
+    list(APPEND VIETASR_CORE_SOURCES
+        src/modules/vad/vad.cc
+        src/modules/vad/vad_segmenter.cc
+        src/modules/vad/energy_backend.cc
+    )
+
+    # The silero and tenvad backends both need ONNX Runtime; disable them (the
+    # energy backend always remains) when it is not available in this build.
+    set(_vad_tenvad OFF)
+    set(_vad_silero OFF)
+    if(VIETASR_VAD_TENVAD AND VIETASR_HAS_ONNXRUNTIME)
+        set(_vad_tenvad ON)
+    elseif(VIETASR_VAD_TENVAD)
+        message(STATUS "vietasr: VIETASR_VAD_TENVAD set but ONNX Runtime is "
+                       "unavailable; tenvad backend disabled")
+    endif()
+    if(VIETASR_VAD_SILERO AND VIETASR_HAS_ONNXRUNTIME)
+        set(_vad_silero ON)
+    elseif(VIETASR_VAD_SILERO)
+        message(STATUS "vietasr: VIETASR_VAD_SILERO set but ONNX Runtime is "
+                       "unavailable; silero backend disabled")
+    endif()
+
+    set(_vad_embed_tenvad "")
+    set(_vad_embed_silero "")
+
+    if(_vad_silero)
+        list(APPEND VIETASR_CORE_SOURCES src/modules/vad/silero_backend.cc)
+        if(VIETASR_EMBED_SILERO)
+            set(_vad_embed_silero
+                "${CMAKE_CURRENT_SOURCE_DIR}/models/vad/silero_vad.onnx")
+        endif()
+    endif()
+
+    if(_vad_tenvad)
+        set(_tenvad_dir "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ten-vad")
+        # Vendored TEN-VAD sources, compiled straight into libvietasr.
+        set(VIETASR_TENVAD_SOURCES
+            "${_tenvad_dir}/src/ten_vad.cc"
+            "${_tenvad_dir}/src/aed.cc"
+            "${_tenvad_dir}/src/biquad.cc"
+            "${_tenvad_dir}/src/fscvrt.cc"
+            "${_tenvad_dir}/src/pitch_est.cc"
+            "${_tenvad_dir}/src/stft.cc"
+            "${_tenvad_dir}/src/fftw.c"
+        )
+        list(APPEND VIETASR_CORE_SOURCES
+            ${VIETASR_TENVAD_SOURCES}
+            src/modules/vad/tenvad_backend.cc
+        )
+        # Third-party code does not pass vietasr's -Wall -Wextra -Wpedantic.
+        if(MSVC)
+            set_source_files_properties(${VIETASR_TENVAD_SOURCES}
+                PROPERTIES COMPILE_OPTIONS "/w")
+        else()
+            set_source_files_properties(${VIETASR_TENVAD_SOURCES}
+                PROPERTIES COMPILE_OPTIONS "-w")
+        endif()
+        if(VIETASR_EMBED_TENVAD)
+            set(_vad_embed_tenvad "${_tenvad_dir}/src/onnx_model/ten-vad.onnx")
+        endif()
+    endif()
+
+    # embedded_vad.cc exposes the embedded model blobs; build it whenever a
+    # neural backend is present (it returns empty blobs when nothing embedded).
+    if(_vad_tenvad OR _vad_silero)
+        list(APPEND VIETASR_CORE_SOURCES src/modules/vad/embedded_vad.cc)
+    endif()
+
+    if(NOT _vad_embed_tenvad STREQUAL "" OR NOT _vad_embed_silero STREQUAL "")
+        include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedVadModel.cmake)
+        vietasr_embed_vad(VIETASR_VAD_EMBED_SOURCES
+            "${_vad_embed_tenvad}" "${_vad_embed_silero}")
+        list(APPEND VIETASR_CORE_SOURCES ${VIETASR_VAD_EMBED_SOURCES})
+    endif()
 endif()
 
 if(VIETASR_MODULE_PUNCTUATION)
@@ -348,6 +429,26 @@ if(VIETASR_MODULE_ITN)
     target_compile_definitions(vietasr_objects PRIVATE VIETASR_HAS_ITN=1)
     if(VIETASR_EMBED_ITN)
         target_compile_definitions(vietasr_objects PRIVATE VIETASR_HAS_EMBEDDED_ITN=1)
+    endif()
+endif()
+
+if(VIETASR_MODULE_VAD AND _vad_tenvad)
+    # TEN-VAD's own headers + the ONNX Runtime C API it uses.
+    target_include_directories(vietasr_objects PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ten-vad/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ten-vad/src")
+    target_compile_definitions(vietasr_objects PRIVATE VIETASR_VAD_TENVAD=1)
+    if(VIETASR_EMBED_TENVAD)
+        target_compile_definitions(vietasr_objects PRIVATE
+            VIETASR_HAS_EMBEDDED_TENVAD=1)
+    endif()
+endif()
+
+if(VIETASR_MODULE_VAD AND _vad_silero)
+    target_compile_definitions(vietasr_objects PRIVATE VIETASR_VAD_SILERO=1)
+    if(VIETASR_EMBED_SILERO)
+        target_compile_definitions(vietasr_objects PRIVATE
+            VIETASR_HAS_EMBEDDED_SILERO=1)
     endif()
 endif()
 
