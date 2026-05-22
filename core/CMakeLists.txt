@@ -29,6 +29,11 @@ message(STATUS "vietasr backends: onnx=${VIETASR_BACKEND_ONNX} coreml=${VIETASR_
 
 option(VIETASR_WITH_CURL "Use libcurl for HTTP model downloads" ON)
 
+# iOS has no system libcurl, and the embedded model needs no HTTP downloads.
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(VIETASR_WITH_CURL OFF)
+endif()
+
 if(VIETASR_WITH_CURL)
     find_package(CURL QUIET)
     if(NOT CURL_FOUND)
@@ -42,7 +47,30 @@ if(VIETASR_BACKEND_ONNX)
         set(ONNXRUNTIME_VERSION "1.20.1")
     endif()
 
-    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
+    if(DEFINED ONNXRUNTIME_FRAMEWORK_DIR)
+        # Apple builds (the iOS/macOS xcframework) supply a prebuilt
+        # onnxruntime.framework slice from the onnxruntime-c CocoaPods archive
+        # — onnxruntime ships no .tgz for iOS. libvietasr links it directly so
+        # the dylib records @rpath/onnxruntime.framework/onnxruntime; the app
+        # embeds both frameworks side by side. See bindings/apple/.
+        set(_ort_url "")
+        get_filename_component(ONNXRUNTIME_FRAMEWORK_DIR
+            "${ONNXRUNTIME_FRAMEWORK_DIR}" ABSOLUTE)
+        if(EXISTS "${ONNXRUNTIME_FRAMEWORK_DIR}/onnxruntime")
+            set(VIETASR_HAS_ONNXRUNTIME 1 CACHE INTERNAL "")
+            set(ONNXRUNTIME_INCLUDE_DIR "${ONNXRUNTIME_FRAMEWORK_DIR}/Headers" CACHE INTERNAL "")
+            set(ONNXRUNTIME_LIB "${ONNXRUNTIME_FRAMEWORK_DIR}/onnxruntime" CACHE INTERNAL "")
+            set(ONNXRUNTIME_LIB_DIR "${ONNXRUNTIME_FRAMEWORK_DIR}" CACHE INTERNAL "")
+            # The onnxruntime pod framework leaves its CoreML / CoreFoundation
+            # dependencies for the consumer to satisfy.
+            set(ONNXRUNTIME_APPLE_SYSTEM_LIBS
+                "-framework CoreML" "-framework Foundation"
+                "-framework CoreFoundation" CACHE INTERNAL "")
+            message(STATUS "onnxruntime (Apple framework): ${ONNXRUNTIME_FRAMEWORK_DIR}")
+        else()
+            message(WARNING "ONNXRUNTIME_FRAMEWORK_DIR has no onnxruntime binary; engine_onnx will be a stub")
+        endif()
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
         set(_ort_url "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}.tgz")
         set(_ort_dirname "onnxruntime-linux-x64-${ONNXRUNTIME_VERSION}")
     elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
@@ -222,7 +250,10 @@ endif()
 if(VIETASR_HAS_ONNXRUNTIME)
     target_compile_definitions(vietasr_objects PRIVATE VIETASR_HAS_ONNXRUNTIME=1)
     target_include_directories(vietasr_objects PUBLIC "${ONNXRUNTIME_INCLUDE_DIR}")
-    target_link_libraries(vietasr_objects PUBLIC "${ONNXRUNTIME_LIB}")
+    # ONNXRUNTIME_LIB may be unset if a platform has no prebuilt onnxruntime.
+    if(ONNXRUNTIME_LIB)
+        target_link_libraries(vietasr_objects PUBLIC "${ONNXRUNTIME_LIB}")
+    endif()
 endif()
 
 if(VIETASR_BUILD_SHARED)
@@ -241,13 +272,38 @@ target_include_directories(vietasr
 if(VIETASR_WITH_CURL)
     target_link_libraries(vietasr PUBLIC CURL::libcurl)
 endif()
-if(VIETASR_HAS_ONNXRUNTIME)
+if(VIETASR_HAS_ONNXRUNTIME AND ONNXRUNTIME_LIB)
     target_link_libraries(vietasr PUBLIC "${ONNXRUNTIME_LIB}")
+endif()
+if(ONNXRUNTIME_APPLE_SYSTEM_LIBS)
+    target_link_libraries(vietasr PUBLIC ${ONNXRUNTIME_APPLE_SYSTEM_LIBS})
 endif()
 
 set_target_properties(vietasr PROPERTIES
     PUBLIC_HEADER "${VIETASR_PUBLIC_HEADERS}"
 )
+
+# Apple: emit libvietasr as a .framework bundle (correctly structured per
+# platform — flat for iOS, versioned for macOS). The Swift binding turns these
+# into VietASR.xcframework. Off by default so desktop/Linux still build a plain
+# libvietasr.{dylib,so}. See bindings/apple/build-xcframework.sh.
+option(VIETASR_APPLE_FRAMEWORK "Build libvietasr as a .framework bundle (Apple)" OFF)
+if(VIETASR_APPLE_FRAMEWORK)
+    if(NOT VIETASR_BUILD_SHARED)
+        message(FATAL_ERROR "VIETASR_APPLE_FRAMEWORK requires VIETASR_BUILD_SHARED=ON")
+    endif()
+    # Bundle name is CVietASR — the Swift wrapper target is VietASR and the two
+    # module names must differ. Only the C ABI header ships in the framework.
+    set_target_properties(vietasr PROPERTIES
+        FRAMEWORK TRUE
+        FRAMEWORK_VERSION A
+        MACOSX_FRAMEWORK_IDENTIFIER io.github.dangvansam.cvietasr
+        MACOSX_FRAMEWORK_BUNDLE_VERSION ${PROJECT_VERSION}
+        MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${PROJECT_VERSION}
+        OUTPUT_NAME CVietASR
+        PUBLIC_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/include/vietasr.h"
+    )
+endif()
 
 if(VIETASR_INSTALL)
     # SONAME versioning matters for a system-installed library. An embedded

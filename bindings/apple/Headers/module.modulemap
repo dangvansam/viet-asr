@@ -1,0 +1,4 @@
+framework module CVietASR {
+    header "vietasr.h"
+    export *
+}
