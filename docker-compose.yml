@@ -42,7 +42,8 @@ services:
         EXTRA_PIP: "silero-vad onnxruntime pyannote.audio matplotlib"
     command: >
       python scripts/serve_vad.py --backend ${VAD_BACKEND:-silero}
-      --device cuda --host 0.0.0.0 --port 9001
+      --device ${VAD_DEVICE:-cpu} --workers ${VAD_WORKERS:-16}
+      --host 0.0.0.0 --port 9001
     environment:
       <<: *hf-env
       HF_TOKEN: ${HF_TOKEN:-}
@@ -115,6 +116,7 @@ services:
     command: >
       python scripts/serve_asr.py --backend nemotron --device cuda
       --host 0.0.0.0 --port 9103
+      --batch-size ${ASR_BATCH_SIZE:-8} --batch-wait-ms ${ASR_BATCH_WAIT_MS:-5}
       --kw model_name=${NEMOTRON_MODEL:-nvidia/nemotron-3.5-asr-streaming-0.6b}
       --kw target_lang=vi-VN
     environment:
@@ -136,6 +138,7 @@ services:
     command: >
       python scripts/serve_asr.py --backend vietasr --device cuda
       --host 0.0.0.0 --port 9104
+      --batch-wait-ms ${ASR_BATCH_WAIT_MS:-5} --workers ${VIETASR_WORKERS:-3}
     environment:
       <<: *hf-env
     <<: *gpu
@@ -187,11 +190,8 @@ services:
     build:
       context: ${SPEAKER_REPO:-/home/samdv/speaker-recognition}
       dockerfile: Dockerfile
-    # explicit gunicorn (the repo's start_api.sh had CRLF → bound the wrong port)
-    command: >
-      gunicorn src.api:app --bind 0.0.0.0:2000 --workers ${API_WORKERS:-1}
-      --worker-class uvicorn.workers.UvicornWorker --timeout 120
-      --access-logfile - --error-logfile -
+    # LitServe manages its own workers (server.run); no gunicorn. API_PORT=2000 below.
+    command: ["python", "-m", "src.api"]
     environment:
       <<: *hf-env
       API_PORT: "2000"

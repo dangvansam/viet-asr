@@ -103,7 +103,7 @@ stage_configs:
           nbest_temperature: 0.3
   transcript_refine:
     ensemble_strategy: rover
-    segment_concurrency: 8                   # parallel segments (HTTP fan-out)
+    segment_concurrency: 16                  # parallel segments (HTTP fan-out) — fills LitServe batch windows
     asr_concurrency: 8                       # fire all hyps' align calls together → mms emission reuse
     use_subtitle: true
     subtitle_weight: 1.5

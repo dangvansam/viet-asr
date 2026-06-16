@@ -89,15 +89,17 @@ class BaseAudioLitAPI(ls.LitAPI):
             tmp.close()
         return {"path": tmp.name, "params": params, "t0": time.perf_counter()}
 
-    def predict(self, batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        items: List[Tuple[str, Dict[str, Any]]] = [(it["path"], it["params"]) for it in batch]
+    def predict(self, batch):
+        single = not isinstance(batch, list)
+        entries: List[Dict[str, Any]] = [batch] if single else batch
+        items: List[Tuple[str, Dict[str, Any]]] = [(it["path"], it["params"]) for it in entries]
         try:
             outputs = self.infer(items)
         finally:
-            for it in batch:
+            for it in entries:
                 self._cleanup(it["path"])
         results: List[Dict[str, Any]] = []
-        for it, output in zip(batch, outputs):
+        for it, output in zip(entries, outputs):
             results.append(
                 {
                     "output": output,
@@ -105,7 +107,7 @@ class BaseAudioLitAPI(ls.LitAPI):
                     "elapsed": round(time.perf_counter() - it["t0"], 4),
                 }
             )
-        return results
+        return results[0] if single else results
 
     def encode_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
         payload = self.envelope(response["output"], response["params"])

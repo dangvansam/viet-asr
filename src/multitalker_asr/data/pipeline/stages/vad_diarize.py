@@ -176,11 +176,12 @@ class VADDiarizeStage(BaseStage):
         waveform, sample_rate, seg_dir, vad_config,
     ) -> List[Dict]:
         file_segments: List[Dict] = []
+        file_vad = record.get("vad_segments")
         for (start, end, speaker), is_overlap in zip(turns, overlaps):
             trim_meta = None
             if vad_config.enable_trim and not is_overlap:
                 start, end, trim_meta = self._trim_turn(
-                    waveform, sample_rate, start, end, vad_config
+                    file_vad, waveform, sample_rate, start, end, vad_config
                 )
             dur = end - start
             if dur < vad_config.min_duration or dur > vad_config.max_duration:
@@ -270,16 +271,31 @@ class VADDiarizeStage(BaseStage):
 
     # ---- helpers (unchanged) ---------------------------------------------
 
-    def _trim_turn(self, waveform, sample_rate, start, end, vad_config):
-        start_sample = int(start * sample_rate)
-        end_sample = int(end * sample_rate)
-        clip = waveform[:, start_sample:end_sample].mean(axis=0)
-        try:
-            result = self._vad_backend.detect(clip, sample_rate)
-        except Exception as exc:
-            logger.warning(f"VAD trim failed, keeping untrimmed turn: {exc}")
-            return start, end, None
-        local = [(seg.start, seg.end) for seg in result.segments]
+    def _local_speech(self, file_vad, start, end):
+        if not file_vad:
+            return None
+        local = []
+        for seg in file_vad:
+            s = float(seg.get("start", 0.0))
+            e = float(seg.get("end", 0.0))
+            lo = max(s, start)
+            hi = min(e, end)
+            if hi > lo:
+                local.append((lo - start, hi - start))
+        return local
+
+    def _trim_turn(self, file_vad, waveform, sample_rate, start, end, vad_config):
+        local = self._local_speech(file_vad, start, end)
+        if local is None:
+            start_sample = int(start * sample_rate)
+            end_sample = int(end * sample_rate)
+            clip = waveform[:, start_sample:end_sample].mean(axis=0)
+            try:
+                result = self._vad_backend.detect(clip, sample_rate)
+            except Exception as exc:
+                logger.warning(f"VAD trim failed, keeping untrimmed turn: {exc}")
+                return start, end, None
+            local = [(seg.start, seg.end) for seg in result.segments]
         span = speech_span(local, pad_s=vad_config.trim_pad_s, lo=0.0, hi=end - start)
         if span is None:
             return start, end, None
