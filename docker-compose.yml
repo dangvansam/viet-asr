@@ -1,0 +1,256 @@
+# Model micro-services for the data pipeline. Each heavy model runs in its own
+# container on the GPU (no torch/nemo/funasr/transformers clashing in one venv);
+# the `pipeline` orchestrator is lightweight (no torch) and talks to everything
+# over REST using only the URLs in .env. GPU via NVIDIA CDI (Docker 29+).
+#
+#   cp .env.example .env   # set HF_TOKEN, GPU_DEVICE, DATA_DIR
+#   docker compose up vad asr-funasr align-mms        # in-repo GPU services
+#   docker compose --profile full up                  # + nemotron / vietasr / qwen3
+#   # speaker-embed (/embed:2010) + gender (/predict:8000) run on the host already;
+#   # the pipeline reaches them via host.docker.internal. Build them in-compose only
+#   # if you have their repos: docker compose --profile external up.
+name: multitalker-asr
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: cdi
+            device_ids: ["${GPU_DEVICE:-nvidia.com/gpu=0}"]
+            capabilities: ["gpu"]
+
+x-healthcheck: &healthcheck
+  interval: 30s
+  timeout: 5s
+  retries: 5
+  start_period: 180s
+
+x-hf-env: &hf-env
+  HF_HOME: /root/.cache/huggingface
+  HF_HUB_OFFLINE: ${HF_OFFLINE:-1}
+  TRANSFORMERS_OFFLINE: ${HF_OFFLINE:-1}
+
+services:
+  vad:
+    build:
+      context: .
+      dockerfile: docker/service.gpu.Dockerfile
+      args:
+        # pyannote.audio 4.x matches the cu128 base's torchaudio 2.10 (3.3.2 used the
+        # removed torchaudio.AudioMetaData). matplotlib: pyannote pipelines need it.
+        EXTRA_PIP: "silero-vad onnxruntime pyannote.audio matplotlib"
+    command: >
+      python scripts/serve_vad.py --backend ${VAD_BACKEND:-silero}
+      --device cuda --host 0.0.0.0 --port 9001
+    environment:
+      <<: *hf-env
+      HF_TOKEN: ${HF_TOKEN:-}
+      PYANNOTE_CACHE: /root/.cache/huggingface/hub  # pyannote_seg loads the cached model from the HF hub dir
+    <<: *gpu
+    ports: ["${VAD_PORT:-9001}:9001"]
+    # default = named volume; set HF_CACHE_HOST to a host HF cache (e.g. for the
+    # offline pyannote/segmentation-3.0 model) to bind-mount it instead.
+    volumes: ["${HF_CACHE_HOST:-/data/samdv/.cache/huggingface}:/root/.cache/huggingface"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9001/health')"]
+      <<: *healthcheck
+
+  # Fun-ASR-MLT served by vLLM (modelscope/FunASR serve_vllm.py) → OpenAI
+  # /v1/audio/transcriptions. vLLM/Blackwell → defaults to GPU 1 (FUNASR_GPU).
+  asr-funasr:
+    build:
+      context: .
+      dockerfile: docker/asr-funasr-vllm.Dockerfile
+    # --spk-model= disables FunASR's built-in diarization (eres2netv2) — the pipeline
+    # does its own (speaker service + sortformer), so skip that extra model download.
+    # --max-model-len caps the KV-cache context (4096 is ample for utterance-level ASR)
+    # so vLLM reserves far less GPU memory and coexists with qwen3/nemotron on GPU1.
+    command: >
+      python serve_vllm.py
+      --model ${FUNASR_MODEL:-FunAudioLLM/Fun-ASR-MLT-Nano-2512}
+      --port 9102 --gpu-memory-utilization ${FUNASR_VLLM_MEM:-0.12}
+      --max-model-len ${FUNASR_MAX_LEN:-4096}
+      --spk-model=
+    environment:
+      <<: *hf-env
+      VLLM_ATTENTION_BACKEND: FLASH_ATTN                       # FlashInfer mis-detects Blackwell sm_120
+      VLLM_USE_FLASHINFER_SAMPLER: "0"
+      FUNASR_BATCH_SIZE: ${FUNASR_BATCH_SIZE:-8}
+      FUNASR_BATCH_WAIT_MS: ${FUNASR_BATCH_WAIT_MS:-20}
+    <<: *gpu
+    # ports: ["${ASR_FUNASR_PORT:-9102}:9102"]
+    volumes:
+      - "${HF_CACHE_HOST:-/data/samdv/.cache/huggingface}:/root/.cache/huggingface"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection(('localhost',9102),2).close()"]
+      <<: *healthcheck
+
+  align-mms:
+    build:
+      context: .
+      dockerfile: docker/service.gpu.Dockerfile
+      args:
+        EXTRA_PIP: ""
+    command: >
+      python scripts/serve_align.py --backend mms_fa --device cuda
+      --host 0.0.0.0 --port 9203
+    environment:
+      <<: *hf-env
+      BATCH_SIZE: ${ALIGN_BATCH_SIZE:-32}
+      BATCH_WAIT_MS: ${ALIGN_BATCH_WAIT_MS:-40}
+    <<: *gpu
+    # ports: ["${ALIGN_MMS_PORT:-9203}:9203"]
+    volumes: ["${HF_CACHE_HOST:-/data/samdv/.cache/huggingface}:/root/.cache/huggingface"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9203/health')"]
+      <<: *healthcheck
+
+  # ---- optional services (profile: full) -------------------------------------
+  asr-nemotron:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: docker/asr-nemotron.Dockerfile
+    command: >
+      python scripts/serve_asr.py --backend nemotron --device cuda
+      --host 0.0.0.0 --port 9103
+      --kw model_name=${NEMOTRON_MODEL:-nvidia/nemotron-3.5-asr-streaming-0.6b}
+      --kw target_lang=vi-VN
+    environment:
+      <<: *hf-env
+    <<: *gpu
+    # ports: ["${ASR_NEMOTRON_PORT:-9103}:9103"]
+    volumes: ["${HF_CACHE_HOST:-/data/samdv/.cache/huggingface}:/root/.cache/huggingface"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9103/health')"]
+      <<: *healthcheck
+
+  asr-vietasr:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: docker/service.gpu.Dockerfile
+      args:
+        EXTRA_PIP: "viet-asr onnxruntime-gpu"
+    command: >
+      python scripts/serve_asr.py --backend vietasr --device cuda
+      --host 0.0.0.0 --port 9104
+    environment:
+      <<: *hf-env
+    <<: *gpu
+    # ports: ["${ASR_VIETASR_PORT:-9104}:9104"]
+    volumes: ["${HF_CACHE_HOST:-/data/samdv/.cache/huggingface}:/root/.cache/huggingface"]
+
+  # Qwen3-ASR via vLLM (OpenAI /v1/chat/completions with audio), per the official
+  # Qwen3-ASR vLLM guide. Runs on the Blackwell GPU 1 (vLLM nightly cu129 supports
+  # sm_120). The pipeline's `qwen3_vllm` client talks to it.
+  asr-qwen3:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: docker/asr-qwen3-vllm.Dockerfile
+    command: >
+      vllm serve ${QWEN_ASR_MODEL:-Qwen/Qwen3-ASR-1.7B}
+      --host 0.0.0.0 --port 8101 --gpu-memory-utilization ${QWEN_VLLM_MEM:-0.20}
+      --max-model-len ${QWEN_MAX_LEN:-4096}
+    environment:
+      <<: *hf-env
+      CUDA_HOME: /usr/local/lib/python3.12/site-packages/nvidia/cu13
+    <<: *gpu
+    # ports: ["${ASR_QWEN3_PORT:-8101}:8101"]
+    volumes: ["${HF_CACHE_HOST:-/data/samdv/.cache/huggingface}:/root/.cache/huggingface"]
+
+  # Qwen3 forced aligner — separate env (qwen-asr downgrades transformers).
+  align-qwen3:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: docker/align-qwen3.Dockerfile
+    command: >
+      python scripts/serve_qwen3_aligner.py
+      --model ${QWEN_ALIGNER_MODEL:-Qwen/Qwen3-ForcedAligner-0.6B}
+      --host 0.0.0.0 --port 8103
+    environment:
+      <<: *hf-env
+    <<: *gpu
+    # ports: ["${ALIGN_QWEN3_PORT:-8103}:8103"]
+    volumes: ["${HF_CACHE_HOST:-/data/samdv/.cache/huggingface}:/root/.cache/huggingface"]
+
+  # ---- speaker embedding + gender (built from each repo's Dockerfile, run HERE; no
+  #      dependency on the external repos' own docker-compose) -------------------
+  # ECAPA-TDNN → OpenAI POST /v1/audio/embeddings. STATELESS (DISABLE_DB=true → no
+  # MySQL); model loaded from the repo's ./checkpoint (mounted), temp audio ephemeral.
+  speaker-embed:
+    profiles: ["full"]
+    image: dangvansam/speaker-recoginition:api
+    build:
+      context: ${SPEAKER_REPO:-/home/samdv/speaker-recognition}
+      dockerfile: Dockerfile
+    # explicit gunicorn (the repo's start_api.sh had CRLF → bound the wrong port)
+    command: >
+      gunicorn src.api:app --bind 0.0.0.0:2000 --workers ${API_WORKERS:-1}
+      --worker-class uvicorn.workers.UvicornWorker --timeout 120
+      --access-logfile - --error-logfile -
+    environment:
+      <<: *hf-env
+      API_PORT: "2000"
+      DISABLE_DB: "true"
+      MODEL_PATH: /app/checkpoint
+      AUDIO_DIR: /tmp/audio
+      SAMPLE_RATE: "16000"
+      THRESHOLD: ${SPEAKER_THRESHOLD:-0.725}
+    <<: *gpu
+    # ports: ["${SPEAKER_PORT:-2010}:2000"]
+    volumes:
+      - "${HF_CACHE_HOST:-/data/samdv/.cache/huggingface}:/root/.cache/huggingface"
+      - "${SPEAKER_REPO:-/home/samdv/speaker-recognition}/checkpoint:/app/checkpoint:ro"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:2000/health')"]
+      <<: *healthcheck
+
+  # wav2vec2 + ECAPA ensemble → OpenAI POST /v1/audio/classifications. Builds the
+  # gender-classification-service repo's Dockerfile (its CMD = fastapi run src/api.py).
+  gender:
+    profiles: ["full"]
+    image: dangvansam/gender-classification-service:latest
+    build:
+      context: ${GENDER_REPO:-/home/samdv/gender-classification-service}
+      dockerfile: Dockerfile
+    environment:
+      <<: *hf-env
+      ENVIRONMENT: prod
+    <<: *gpu
+    # ports: ["${GENDER_PORT:-8000}:8000"]
+    volumes: ["${HF_CACHE_HOST:-/data/samdv/.cache/huggingface}:/root/.cache/huggingface"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      <<: *healthcheck
+
+  # ---- orchestrator (lightweight: no torch/nemo) -----------------------------
+  pipeline:
+    build:
+      context: .
+      dockerfile: docker/pipeline.Dockerfile
+    command: >
+      python scripts/run_pipeline.py --config ${PIPELINE_CONFIG:-configs/pipeline_crawl_services.yaml}
+    environment:
+      VAD_URL: ${VAD_URL:-http://vad:9001}
+      ASR_URL: ${ASR_URL:-http://asr-funasr:9102}
+      ALIGN_URL: ${ALIGN_URL:-http://align-mms:9203}
+      EMBED_URL: ${EMBED_URL:-http://speaker-embed:2000}
+      GENDER_URL: ${GENDER_URL:-http://gender:8000}
+      HF_TOKEN: ${HF_TOKEN:-}
+      # seed.jsonl carries ABSOLUTE host audio_filepath paths, so the data dir is
+      # bind-mounted at the SAME path inside the container (below) and DATA_DIR points
+      # there — seed lookup, audio_filepath, and output_dir all resolve identically.
+      DATA_DIR: ${DATA_DIR:-/home/samdv/DATA/crawl-2026}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ${DATA_DIR:-/home/samdv/DATA/crawl-2026}:${DATA_DIR:-/home/samdv/DATA/crawl-2026}
+    depends_on:
+      vad: {condition: service_healthy}
+      asr-funasr: {condition: service_healthy}
+      align-mms: {condition: service_healthy}
+

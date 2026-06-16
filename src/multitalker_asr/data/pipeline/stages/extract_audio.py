@@ -11,6 +11,7 @@ from loguru import logger
 from ..base_stage import BaseStage
 from ..checkpoint import PipelineCheckpoint
 from ..config import PipelineConfig
+from ..parallel import parallel_map
 
 
 class ExtractAudioStage(BaseStage):
@@ -33,29 +34,28 @@ class ExtractAudioStage(BaseStage):
         out_dir = Path(config.output_dir) / "extracted"
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        processed: List[Dict] = []
-        for record in to_process:
+        def extract(record: Dict) -> Dict:
             src = record.get("audio_filepath") or record.get("source_video", "")
             if not src:
                 logger.warning(f"Record {record['id']} has no source file, skipping")
-                processed.append(record)
-                continue
-
+                return record
             out_path = str(out_dir / f"{record['id']}.wav")
             try:
                 duration = self._extract_one(src, out_path)
-                record = dict(record)
-                record["audio_filepath"] = out_path
-                record["duration"] = duration
-                checkpoint.mark_processed(record["id"], self.name)
-                checkpoint.save_state()
-                logger.info(f"Extracted: {record['id']} ({duration:.1f}s)")
-            except RuntimeError:
-                raise
             except subprocess.CalledProcessError as e:
                 logger.error(f"ffmpeg failed for {src}: {e}")
-            processed.append(record)
+                return record
+            record = dict(record)
+            record["audio_filepath"] = out_path
+            record["duration"] = duration
+            logger.info(f"Extracted: {record['id']} ({duration:.1f}s)")
+            return record
 
+        workers = getattr(config, "concurrency", 1) or 1
+        processed = parallel_map(extract, to_process, workers)
+        for record in to_process:
+            checkpoint.mark_processed(record["id"], self.name)
+        checkpoint.save_state()
         return done + processed
 
     def _extract_one(self, src_path: str, out_path: str) -> float:

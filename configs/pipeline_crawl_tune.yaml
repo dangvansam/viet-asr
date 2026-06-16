@@ -1,0 +1,132 @@
+# Precision-first, multi-task tuning pipeline (URL-only services, dual-GPU).
+# ASR đa model fuse mức từ (word-level ROVER): anchor Fun-ASR-MLT + qwen3_vllm +
+# nemotron + vietasr + subtitle (khi có) → nhãn cuối tốt nhất theo từng từ.
+# region/age/emotion lấy weak-label từ crawl_seed; gender từ gender service.
+# Chạy từ host venv với URL host-port (xem .env / lệnh run).
+pipeline_name: crawl_tune
+stages:
+  - crawl_seed
+  - extract_audio
+  - audio_quality      # SNR gate
+  - vad                # VAD service (pyannote_seg offline)
+  - vad_diarize        # vad_sv: VAD-service cắt đoạn, speaker_verify gán nhãn
+  - speaker_verify     # /embed clustering — giữ single-speaker sạch
+  - multi_transcribe   # anchor: Fun-ASR-MLT (service)
+  - transcript_refine  # ROVER word-level: + qwen3_vllm + nemotron + vietasr + subtitle
+  - align              # alignment chuẩn trên transcript fuse + trim biên từ
+  - gender_classify    # gender model (host service)
+  - consensus          # cổng precision: alignment + ASR-agreement (+ subtitle nếu có)
+  - filter
+  - write_manifest
+
+output_dir: ${oc.env:OUTPUT_DIR,/home/samdv/DATA/tune-30/v1}
+device: cpu
+concurrency: 8        # per-stage across-record client fan-out (feeds vLLM batchers)
+
+crawl_seed:
+  seed_path: ${oc.env:DATA_DIR,/home/samdv/DATA/crawl-2026}/_seed/seed.jsonl
+
+audio_quality:
+  enabled: true
+  backend: snr
+  min_snr_db: 5.0
+
+vad:
+  backend: service
+  device: cpu
+  enable_prefilter: true
+  min_speech_ratio: 0.1
+  enable_trim: true
+  trim_pad_s: 0.1
+  min_gap_s: 0.2
+  min_duration: 1.0
+  max_duration: 30.0
+  backend_kwargs:
+    base_url: ${oc.env:VAD_URL,http://localhost:9401}
+
+diarize:
+  backend: vad_sv
+  embed_url: ${oc.env:EMBED_URL,http://localhost:2010}
+  detect_overlap: true
+  overlap_min_s: 0.25
+
+speaker_verify:
+  enabled: true
+  url: ${oc.env:EMBED_URL,http://localhost:2010}
+  cluster_threshold: 0.45
+  ambiguous_max: 0.30
+  drop_ambiguous: true
+
+align:
+  backend: service
+  language: Vietnamese
+  device: cpu
+  text_field: text_itn
+  trim_to_words: true
+  trim_pad_s: 0.1
+  backend_kwargs:
+    base_url: ${oc.env:ALIGN_URL,http://localhost:9403}
+
+gender:
+  url: ${oc.env:GENDER_URL,http://localhost:8000}
+  model: ensemble
+  timeout: 30
+
+consensus:
+  tolerance_s: 0.1
+  min_overlap_iou: 0.5
+  min_alignment_score: 0.85
+  require_asr_agreement: true
+  min_asr_confidence: 0.6           # ROVER: ≥60% từ được ≥2 nguồn đồng thuận
+  require_subtitle_agreement: false # STT seed không có subtitle → check tự bỏ qua
+  subtitle_min_similarity: 0.6
+  require_attribute_agreement: false
+  drop_on_disagreement: true
+
+manifest:
+  output_filename: manifest.jsonl
+  text_field: text_itn
+  shard_by: platform
+  dataset_metadata_filename: dataset_metadata.jsonl
+  dataset_summary_filename: dataset_summary.json
+
+stage_configs:
+  multi_transcribe:
+    ensemble_strategy: single
+    backends:
+      - name: openai_transcription          # Fun-ASR-MLT (anchor)
+        enabled: true
+        kwargs:
+          base_url: ${oc.env:ASR_URL,http://localhost:9402}
+          language: vi
+          n_best: 3                         # n-best (greedy + 2 sampled) → ROVER 1/N votes
+          nbest_temperature: 0.3
+  transcript_refine:
+    ensemble_strategy: rover
+    segment_concurrency: 8                   # parallel segments (HTTP fan-out)
+    asr_concurrency: 8                       # fire all hyps' align calls together → mms emission reuse
+    use_subtitle: true
+    subtitle_weight: 1.5
+    min_agree: 2
+    include_primary: true
+    align_backend: service                  # force-align từng nhãn qua align service
+    align_language: Vietnamese
+    align_kwargs:
+      base_url: ${oc.env:ALIGN_URL,http://localhost:9403}
+    backends:
+      - name: openai_transcription           # Qwen3-ASR (vLLM)
+        enabled: true
+        kwargs:
+          base_url: ${oc.env:QWEN_ASR_URL,http://localhost:8101}
+          model: Qwen/Qwen3-ASR-1.7B
+          language: vi
+      - name: openai_transcription           # nemotron-3.5-streaming
+        enabled: true
+        kwargs:
+          base_url: ${oc.env:NEMOTRON_URL,http://localhost:9404}
+          language: vi-VN
+      - name: openai_transcription           # vietasr
+        enabled: true
+        kwargs:
+          base_url: ${oc.env:VIETASR_URL,http://localhost:9104}
+          language: vi
