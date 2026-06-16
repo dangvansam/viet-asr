@@ -2,13 +2,15 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from .base import BaseConfig
+from .streaming import ChunkPreset, StreamingProfile, preset_to_att_context
 
 
 @dataclass
 class InferenceConfig(BaseConfig):
     audio_file: Optional[str] = None
     output_path: str = "data/output.json"
-    att_context_size: List[int] = field(default_factory=lambda: [70, 13])
+    att_context_size: List[int] = field(default_factory=lambda: [56, 13])
+    streaming_profile: Optional[StreamingProfile] = None
     batch_size: int = 1
     streaming_mode: bool = True
     parallel_speaker_strategy: bool = True
@@ -35,3 +37,18 @@ class InferenceConfig(BaseConfig):
     print_path: str = "transcription.sh"
     word_window: int = 100
     verbose: bool = False
+
+    def __post_init__(self):
+        if self.streaming_profile is not None:
+            profile_ctx = self.streaming_profile.att_context_size
+            if self.att_context_size == [56, 13] and profile_ctx != self.att_context_size:
+                self.att_context_size = profile_ctx
+
+    @classmethod
+    def with_preset(cls, preset: ChunkPreset, **kwargs) -> "InferenceConfig":
+        profile = StreamingProfile(preset=preset)
+        return cls(
+            att_context_size=profile.att_context_size,
+            streaming_profile=profile,
+            **kwargs,
+        )

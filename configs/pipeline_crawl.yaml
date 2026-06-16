@@ -1,0 +1,110 @@
+pipeline_name: crawl
+stages:
+  - crawl_seed
+  - extract_audio
+  - vad
+  - vad_diarize
+  - multi_transcribe
+  - align
+  - tag_attributes
+  - consensus
+  - filter
+  - write_manifest
+
+output_dir: /home/samdv/DATA/crawl-2026
+device: cuda
+
+crawl_seed:
+  seed_path: /home/samdv/DATA/crawl-2026/_seed/seed.jsonl
+
+vad:
+  backend: silero
+  device: cpu
+  enable_prefilter: true
+  min_speech_ratio: 0.1
+  enable_trim: true
+  trim_pad_s: 0.1
+  min_gap_s: 0.2
+  min_duration: 1.0
+  max_duration: 30.0
+  hf_token: ${oc.env:HF_TOKEN,}
+
+# Aligner runs in-venv. qwen3 (qwen-asr) needs transformers 4.57 which conflicts
+# with NeMo's transformers 5.3.0 — use mms_fa (torchaudio, no transformers) or
+# nemo_nfa here. qwen3 is only usable from a separate venv / as a service.
+align:
+  backend: mms_fa
+  language: Vietnamese
+  device: cuda
+  text_field: text_itn
+
+consensus:
+  tolerance_s: 0.15
+  min_overlap_iou: 0.4
+  require_asr_agreement: true
+  min_asr_confidence: 0.0
+  min_alignment_score: 0.7
+  drop_on_disagreement: true
+  require_subtitle_agreement: false
+  subtitle_min_similarity: 0.4
+  attribute_check_axes: [gender]
+  require_attribute_agreement: false
+
+manifest:
+  output_filename: manifest.jsonl
+  text_field: text_itn
+  shard_by: platform
+  dataset_metadata_filename: dataset_metadata.jsonl
+  dataset_summary_filename: dataset_summary.json
+
+stage_configs:
+  multi_transcribe:
+    ensemble_strategy: single
+    backends:
+      # Every ASR is a local REST service speaking the OpenAI Audio API
+      # (/v1/audio/transcriptions). The unified `openai_transcription` client hits
+      # them all — swap/extend by URL. Qwen3-ASR (vLLM):
+      - name: openai_transcription
+        enabled: true
+        kwargs:
+          base_url: ${oc.env:QWEN_ASR_URL,http://127.0.0.1:8101}
+          model: Qwen/Qwen3-ASR-0.6B
+          language: vi
+      # Fun-ASR-MLT (vLLM). Enable for ensemble + switch ensemble_strategy to vote/rover:
+      - name: openai_transcription
+        enabled: false
+        kwargs:
+          base_url: ${oc.env:ASR_URL,http://127.0.0.1:9102}
+          model: FunAudioLLM/Fun-ASR-MLT-Nano-2512
+          language: vi
+      # NeMo streaming ASR (service):
+      - name: openai_transcription
+        enabled: false
+        kwargs:
+          base_url: ${oc.env:NEMOTRON_URL,http://127.0.0.1:9103}
+          language: vi-VN
+      # VietASR (service):
+      - name: openai_transcription
+        enabled: false
+        kwargs:
+          base_url: ${oc.env:VIETASR_URL,http://127.0.0.1:9104}
+          language: vi
+      # Google Speech-to-Text V2 (the only non-local/cloud backend). Needs
+      # `uv add google-cloud-speech` + GCP credentials (or GOOGLE_CLOUD_PROJECT).
+      - name: google_speech
+        enabled: false
+        kwargs:
+          project_id: ""                  # or set env GOOGLE_CLOUD_PROJECT
+          model: chirp_3
+          language_codes: [vi-VN]
+          credentials_path: ""            # path to service-account.json
+          enable_automatic_punctuation: true
+          enable_word_time_offsets: true
+  tag_attributes:
+    axes:
+      - axis: gender
+        strategy: vote
+        min_confidence: 0.0
+        backends:
+          - name: f0_heuristic
+            device: cpu

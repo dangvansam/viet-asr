@@ -10,6 +10,7 @@ vad:
   model: pyannote-onnx
 
 transcribe:
+  base_url: ${oc.env:ASR_URL,http://127.0.0.1:9102}
   model: FunAudioLLM/Fun-ASR-MLT-Nano-2512
   language: auto
   output_itn: true

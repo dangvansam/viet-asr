@@ -54,6 +54,10 @@ class GenderClassifyStage(BaseStage):
                 result = self._classify_one(audio_path, cfg)
                 record["gender"] = result["gender"]
                 record["gender_confidence"] = result["gender_confidence"]
+                # Stamp attribute_confidence so FilterStage won't mask gender.
+                conf = dict(record.get("attribute_confidence", {}))
+                conf["gender"] = result["gender_confidence"]
+                record["attribute_confidence"] = conf
                 checkpoint.mark_processed(record["id"], self.name)
             except Exception as e:
                 logger.error(f"Gender API error for {record['id']}: {e}")
@@ -70,31 +74,63 @@ class GenderClassifyStage(BaseStage):
 
     def _classify_one(self, audio_path: str, cfg: GenderConfig) -> Dict:
         """
-        POST audio to gender service.
+        POST audio to the gender service `/v1/audio/classifications` (OpenAI-style).
+        Falls back to the legacy `/predict` (404) for zero-downtime rollout.
         Returns {"gender": "male"|"female", "gender_confidence": float}.
         """
         import requests
 
+        base = self._base_url(cfg.url)
         with open(audio_path, "rb") as f:
             resp = requests.post(
-                cfg.url,
-                params={"model": cfg.model, "return_label": False},
-                files={"audiofile": f},
+                f"{base}/v1/audio/classifications",
+                data={"model": cfg.model, "probs": "true"},
+                files={"file": f},
                 timeout=cfg.timeout,
             )
+        if resp.status_code == 404:
+            with open(audio_path, "rb") as f:
+                resp = requests.post(
+                    f"{base}/predict",
+                    params={"model": cfg.model, "return_label": False},
+                    files={"audiofile": f},
+                    timeout=cfg.timeout,
+                )
         resp.raise_for_status()
-        data = resp.json()
-        gender = data["gender"].lower()  # "MALE" → "male"
-        probs = data.get("probs", [0.5, 0.5])
-        confidence = max(probs) if probs else 0.5
-        return {"gender": gender, "gender_confidence": confidence}
+        return self._parse(resp.json())
+
+    @staticmethod
+    def _parse(data: Dict) -> Dict:
+        """Parse the OpenAI-style classification (tolerant of the legacy /predict shape)."""
+        label = (data.get("label") or data.get("gender") or "").lower()
+        if data.get("confidence") is not None:
+            confidence = float(data["confidence"])
+        else:
+            probs = data.get("probs", [0.5, 0.5])
+            if isinstance(probs, dict):
+                confidence = max(probs.values()) if probs else 0.5
+            else:
+                confidence = max(probs) if probs else 0.5
+        return {"gender": label, "gender_confidence": confidence}
+
+    @staticmethod
+    def _base_url(url: str) -> str:
+        base = url.rstrip("/")
+        for suffix in ("/v1/audio/classifications", "/predict"):
+            if base.endswith(suffix):
+                return base[: -len(suffix)]
+        return base
 
     def _check_service(self, url: str, timeout: int = 5) -> bool:
-        """GET {url}/health_check → True if 200, False otherwise."""
+        """Probe the service root → True if 200. Tries /health then /health_check then /."""
         import requests
 
-        try:
-            resp = requests.get(f"{url}/health_check", timeout=timeout)
-            return resp.status_code == 200
-        except Exception:
-            return False
+        base = self._base_url(url)
+        for path in ("/health", "/health_check", "/"):
+            try:
+                resp = requests.get(f"{base}{path}", timeout=timeout)
+                if resp.status_code == 200:
+                    return True
+            except Exception:
+                continue
+        return False

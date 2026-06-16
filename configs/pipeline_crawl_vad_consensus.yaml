@@ -1,0 +1,88 @@
+# Variant of pipeline_crawl that runs multi-provider VAD consensus instead of a
+# single VAD engine. A frame is kept as speech only when a majority of providers
+# (silero + pyannote/segmentation-3.0 + ten-vad) agree, tightening segment
+# boundaries before diarization + the consensus gate. Requires:
+#   uv sync --extra vad        # silero-vad, pyannote.audio, ten-vad
+#   export HF_TOKEN=...        # pyannote/segmentation-3.0 is gated
+pipeline_name: crawl_vad_consensus
+stages:
+  - crawl_seed
+  - extract_audio
+  - vad
+  - vad_diarize
+  - multi_transcribe
+  - align
+  - tag_attributes
+  - consensus
+  - filter
+  - write_manifest
+
+output_dir: /home/samdv/DATA/crawl-2026
+device: cuda
+
+crawl_seed:
+  seed_path: /home/samdv/DATA/crawl-2026/_seed/seed.jsonl
+
+vad:
+  backend: consensus
+  device: cuda
+  enable_prefilter: true
+  min_speech_ratio: 0.1
+  enable_trim: true
+  trim_pad_s: 0.1
+  min_gap_s: 0.2
+  min_duration: 1.0
+  max_duration: 30.0
+  hf_token: ${oc.env:HF_TOKEN,}
+  backend_kwargs:
+    strategy: majority        # majority | intersection | union (or set min_votes)
+    frame_hop_s: 0.02
+    providers:
+      - name: silero
+      - name: pyannote_seg
+      - name: ten
+
+align:
+  backend: mms_fa
+  language: Vietnamese
+  device: cuda
+  text_field: text_itn
+
+consensus:
+  tolerance_s: 0.15
+  min_overlap_iou: 0.4
+  require_asr_agreement: true
+  min_asr_confidence: 0.0
+  min_alignment_score: 0.7
+  drop_on_disagreement: true
+  require_subtitle_agreement: false
+  subtitle_min_similarity: 0.4
+  attribute_check_axes: [gender]
+  require_attribute_agreement: false
+
+manifest:
+  output_filename: manifest.jsonl
+  text_field: text_itn
+  shard_by: platform
+  dataset_metadata_filename: dataset_metadata.jsonl
+  dataset_summary_filename: dataset_summary.json
+
+stage_configs:
+  multi_transcribe:
+    ensemble_strategy: single
+    backends:
+      - name: openai_transcription
+        device: cpu
+        enabled: true
+        kwargs:
+          base_url: ${oc.env:QWEN_ASR_URL,http://127.0.0.1:8101}
+          model: Qwen/Qwen3-ASR-0.6B
+          language: vi
+  tag_attributes:
+    axes:
+      - axis: gender
+        strategy: vote
+        min_confidence: 0.0
+        backends:
+          - name: f0_heuristic
+            device: cpu

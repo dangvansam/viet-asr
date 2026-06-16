@@ -6,7 +6,9 @@ from nemo.collections.asr.parts.utils.streaming_utils import CacheAwareStreaming
 from omegaconf import OmegaConf
 
 from ..configs import InferenceConfig
+from ..configs.streaming import ChunkPreset
 from .base import BaseInferenceEngine
+from .cache_aware import CacheAwareCapability, ChunkSwitcher
 
 
 class StreamingInferenceEngine(BaseInferenceEngine):
@@ -20,10 +22,28 @@ class StreamingInferenceEngine(BaseInferenceEngine):
         self._diar_model = diar_model
         self._cfg = inference_cfg or InferenceConfig()
         self._streamer = None
+        self._chunk_switcher: Optional[ChunkSwitcher] = None
 
     def setup(self) -> None:
         self._setup_diarization_streaming()
         self._setup_asr_streaming()
+
+    @property
+    def chunk_switcher(self) -> Optional[ChunkSwitcher]:
+        return self._chunk_switcher
+
+    def switch_chunk(self, preset: ChunkPreset) -> List[int]:
+        if self._chunk_switcher is None:
+            self._chunk_switcher = ChunkSwitcher(
+                self._asr_model, profile=self._cfg.streaming_profile
+            )
+        return self._chunk_switcher.apply(preset)
+
+    def validate_cache_aware(self) -> CacheAwareCapability:
+        switcher = self._chunk_switcher or ChunkSwitcher(
+            self._asr_model, profile=self._cfg.streaming_profile
+        )
+        return switcher.validate()
 
     def infer(self, audio_path: str) -> List[Dict[str, Any]]:
         if self._streamer is None:
@@ -78,6 +98,12 @@ class StreamingInferenceEngine(BaseInferenceEngine):
             self._diar_model.sortformer_modules.fifo_len = 188
 
     def _setup_asr_streaming(self) -> None:
+        if self._cfg.streaming_profile is not None:
+            self._chunk_switcher = ChunkSwitcher(
+                self._asr_model, profile=self._cfg.streaming_profile
+            )
+            self._chunk_switcher.apply(self._cfg.streaming_profile.preset)
+            return
         if self._cfg.att_context_size and hasattr(
             self._asr_model.encoder, "set_default_att_context_size"
         ):

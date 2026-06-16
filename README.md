@@ -109,6 +109,62 @@ The extended manifest format:
  "age": "young", "voice_state": "sober", "language": "vi"}
 ```
 
+### Raw-audio segmentation pipeline (VAD → diarization → ASR → alignment → consensus)
+
+> 📄 Tài liệu chi tiết quy trình xử lý dữ liệu (tiếng Việt, có sơ đồ + thống kê + ví dụ thật): [docs/data-pipeline.md](docs/data-pipeline.md)
+
+For raw/long recordings, `scripts/run_pipeline.py` cuts training segments by
+**(segment, speaker, timestamp)** and keeps only segments where the independent
+signals agree. The chain:
+
+```
+extract_audio → vad → vad_diarize → multi_transcribe → align → consensus → write_manifest
+```
+
+- **vad** — standalone voice-activity detection. Pre-filters near-silent files
+  and trims leading/trailing silence off diarized turns. Pluggable backend
+  (one selected, many supported): `silero` (default), `fsmn`, `ten`, `pyannote_seg`.
+- **vad_diarize** — pyannote `speaker-diarization-3.1`, one clip per speaker turn.
+- **multi_transcribe** — runs several ASR models and the ensembler picks the best
+  transcript; that transcript is the input to alignment.
+- **align** — forced alignment for word timestamps. Pluggable backend: `qwen3`
+  (default), `nemo_nfa`, `mms_fa`. Qwen3-ForcedAligner does not officially list
+  Vietnamese among its 11 languages, but an empirical probe confirmed it returns
+  correct monotonic Vietnamese word timestamps; `nemo_nfa`/`mms_fa` remain
+  drop-in fallbacks.
+- **consensus** — keeps a segment only when the VAD/diarization bounds, the
+  alignment span, the `alignment_score`, and the ASR ensemble confidence agree
+  within tolerance (`consensus.*` config).
+
+Optional backend dependencies (install only what you select):
+
+```bash
+uv sync --extra vad                                   # silero-vad + onnxruntime
+uv pip install funasr                                 # fsmn VAD / FunASR ASR
+uv pip install "git+https://github.com/TEN-framework/ten-vad.git"   # ten VAD
+uv pip install qwen-asr                               # qwen3 aligner
+# pyannote/segmentation-3.0 is GATED: accept terms on HF and set vad.hf_token
+```
+
+#### Service mode — docker-compose, REST, URL-only config
+
+To avoid Python env conflicts, every model (VAD / ASR / alignment / speaker
+embedding) can run as its **own container** and the pipeline talks to them over
+**REST** — config carries only URLs, and the orchestrator image ships with no
+torch/NeMo/funasr. Each category exposes a fixed REST contract behind one URL-only
+client (`backend: service` + `backend_kwargs.base_url`); reusable servers live in
+`scripts/serve_{vad,asr,align}.py` on top of `serving/app_factory.py`.
+
+```bash
+cp .env.example .env                                  # HF_TOKEN, GPU_DEVICE, repo paths, DATA_DIR
+docker compose up vad asr-funasr align-mms speaker-embed gender   # core services
+docker compose --profile full up                      # + nemotron / vietasr / qwen3 / aligner
+docker compose run --rm pipeline                      # uses configs/pipeline_crawl_services.yaml
+```
+
+See [docs/data-pipeline.md §11](docs/data-pipeline.md) for the full service map and
+REST contracts.
+
 ### Training (3-Phase Curriculum)
 
 ```bash

@@ -1,0 +1,11 @@
+# Runtime deps for the lightweight pipeline orchestrator (no model libs).
+loguru>=0.7
+numpy>=1.26
+soundfile>=0.12
+requests>=2.32
+omegaconf>=2.3
+pandas>=2.0
+tqdm>=4.66
+# crawl ingestion
+minio>=7.2
+psycopg2-binary>=2.9

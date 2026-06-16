@@ -16,10 +16,10 @@ class MultiTaskConfig(BaseConfig):
     voice_state_classes: int = 2
     language_classes: int = 4
     textnorm_classes: int = 2
+    region_classes: int = 3
     ce_loss_weight: float = 1.0
     encoder_source: str = "nemo"
 
-    # Ordered task names matching prompt positions
     task_order: List[str] = field(
         default_factory=lambda: [
             "language",
@@ -29,6 +29,16 @@ class MultiTaskConfig(BaseConfig):
             "voice_state",
             "textnorm",
         ]
+    )
+
+    _VALID_TASKS = (
+        "language",
+        "emotion",
+        "gender",
+        "age",
+        "voice_state",
+        "textnorm",
+        "region",
     )
 
     def __post_init__(self):
@@ -56,6 +66,7 @@ class MultiTaskConfig(BaseConfig):
             "voice_state": self.voice_state_classes,
             "language": self.language_classes,
             "textnorm": self.textnorm_classes,
+            "region": self.region_classes,
         }
         if task not in mapping:
             raise ValueError(f"Unknown task '{task}'. Valid: {list(mapping.keys())}")
@@ -68,3 +79,15 @@ class MultiTaskConfig(BaseConfig):
     @property
     def task_class_counts(self) -> dict:
         return {t: self._class_count_for(t) for t in self.task_order}
+
+    @classmethod
+    def full_attributes(cls) -> "MultiTaskConfig":
+        return cls(
+            num_prompt_positions=5,
+            language_classes=4,
+            emotion_classes=7,
+            gender_classes=2,
+            age_classes=4,
+            region_classes=3,
+            task_order=["language", "emotion", "gender", "age", "region"],
+        )

@@ -126,19 +126,18 @@ def test_vad_diarize_duration_filter(tmp_path):
 
 def test_vad_diarize_clip_segment(tmp_path):
     """Clipped WAV has duration matching the segment length."""
-    pytest.importorskip("torchaudio", reason="torchaudio not installed in this environment")
-    import torch
-    import torchaudio
+    import numpy as np
+    import soundfile as sf
 
     sample_rate = 16000
     duration_s = 5.0
-    waveform = torch.zeros(1, int(sample_rate * 10))  # 10s
+    waveform = np.zeros((1, int(sample_rate * 10)), dtype=np.float32)  # 10s
 
     out_path = str(tmp_path / "clip.wav")
     stage = VADDiarizeStage()
     stage._clip_segment(waveform, sample_rate, start=2.0, end=7.0, out_path=out_path)
 
     assert Path(out_path).exists()
-    loaded, sr = torchaudio.load(out_path)
-    clip_duration = loaded.shape[1] / sr
+    loaded, sr = sf.read(out_path)
+    clip_duration = len(loaded) / sr
     assert abs(clip_duration - duration_s) < 0.1

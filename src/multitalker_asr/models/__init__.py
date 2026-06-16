@@ -1,9 +1,19 @@
 from .base import BaseASRModel
+from .conditioning import (
+    AttributeEmbedding,
+    AuxLossScheduler,
+    BaseConditioner,
+    ConditionState,
+    DecoderTagOnlyConditioner,
+    FeatureConcatConditioner,
+    HybridConditioner,
+    PrependPromptCEConditioner,
+)
+from .heads import BaseHead, SpeakerHead
 from .multitalker import MultitalkerASRModel
 from .multitask_model import MultitalkerMultiTaskModel
+from .prompt_embedding import PromptEmbedding, TaskTokenRegistry
 from .tokenizer_extender import TokenizerExtender
-from .prompt_embedding import TaskTokenRegistry, PromptEmbedding
-from .heads import BaseHead, SpeakerHead
 
 __all__ = [
     "BaseASRModel",
@@ -14,4 +24,12 @@ __all__ = [
     "PromptEmbedding",
     "BaseHead",
     "SpeakerHead",
+    "BaseConditioner",
+    "ConditionState",
+    "AttributeEmbedding",
+    "AuxLossScheduler",
+    "PrependPromptCEConditioner",
+    "DecoderTagOnlyConditioner",
+    "FeatureConcatConditioner",
+    "HybridConditioner",
 ]

@@ -1,0 +1,91 @@
+pipeline_name: crawl_invenv
+stages:
+  - crawl_seed
+  - extract_audio
+  - audio_quality
+  - vad
+  - vad_diarize
+  - speaker_verify
+  - transcribe
+  - gender_classify
+  - consensus
+  - filter
+  - write_manifest
+
+output_dir: /home/samdv/DATA/crawl-2026
+device: cuda
+
+crawl_seed:
+  seed_path: /home/samdv/DATA/crawl-2026/_seed/seed.jsonl
+
+# vad pre-filters near-silent files; vad_diarize splits into per-speaker turns.
+# SNR gate (numpy, no model): drop very noisy files early; saves diarization/ASR.
+audio_quality:
+  enabled: true
+  backend: snr
+  min_snr_db: 3.0
+
+vad:
+  backend: silero
+  device: cpu
+  enable_prefilter: true
+  min_speech_ratio: 0.05
+  enable_trim: true
+  trim_pad_s: 0.15
+  min_duration: 1.0
+  max_duration: 30.0
+
+# Diarizer backend: pyannote (cached HF token) | sortformer (models/*.nemo,
+# native overlap, no HF gate) | vad_sv (silero VAD; speaker_verify assigns labels).
+diarize:
+  backend: sortformer
+  model_path: models/diar_streaming_sortformer_4spk-v2.1.nemo
+  device: cuda
+  detect_overlap: true
+  overlap_min_s: 0.25
+
+# Verify/correct speaker labels with the speaker-recognition /embed service:
+# re-cluster ECAPA embeddings per file, relabel by voice, drop ambiguous, keep
+# overlap-flagged. Threshold ~0.45 (0.725 over-splits crawl clips).
+speaker_verify:
+  enabled: true
+  url: http://localhost:2010/embed
+  cluster_threshold: 0.45
+  ambiguous_max: 0.30
+  drop_ambiguous: true
+
+# Optional: re-transcribe overlap segments per-speaker with the multitalker model.
+overlap_reprocess:
+  enabled: false
+  asr_model_path: models/multitalker-vietnamese.nemo
+  diar_model_path: models/diar_streaming_sortformer_4spk-v2.1.nemo
+
+transcribe:
+  base_url: ${oc.env:ASR_URL,http://127.0.0.1:9102}
+  model: FunAudioLLM/Fun-ASR-MLT-Nano-2512
+  language: vi
+
+# Alignment comes from Fun-ASR-MLT's own per-token timestamps (set in transcribe).
+# Consensus gates on alignment coverage + subtitle cross-check + gender agreement.
+consensus:
+  tolerance_s: 0.3
+  min_overlap_iou: 0.4
+  min_alignment_score: 0.5
+  require_asr_agreement: false
+  min_asr_confidence: 0.0
+  drop_on_disagreement: true
+  require_subtitle_agreement: true
+  subtitle_min_similarity: 0.3
+  attribute_check_axes: []
+  require_attribute_agreement: false
+
+# Gender via the deep ensemble (wav2vec2 + ECAPA-TDNN) HTTP service.
+gender:
+  url: http://localhost:8000/predict
+  model: ensemble
+  timeout: 30
+
+manifest:
+  output_filename: manifest.jsonl
+  text_field: text_itn
+  shard_by: platform

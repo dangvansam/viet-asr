@@ -8,6 +8,12 @@ wheels/
 *.wav
 *.log
 
+# Secrets / local env
+.env
+
+# Data artifacts
+manifest.jsonl
+
 # Virtual environments
 .venv
 

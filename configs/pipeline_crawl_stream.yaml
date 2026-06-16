@@ -1,0 +1,159 @@
+# On-the-fly streaming from the social-video-crawl DB. The StreamPipeline driver
+# owns task ingestion + manifest writing, so `crawl_seed` and `write_manifest` are
+# NOT in `stages` (only the per-item processing stages are).
+pipeline_name: crawl_stream
+stages:
+  - extract_audio
+  - audio_quality
+  - vad
+  - vad_diarize
+  - speaker_verify
+  - transcribe          # primary: Fun-ASR (punctuation + word timestamps)
+  - transcript_refine   # fuse vietasr + qwen3 + VTT subtitle (word-level ROVER; anchor IS Fun-ASR)
+  - gender_classify
+  - consensus
+  - filter
+
+output_dir: /home/samdv/DATA/crawl-2026
+device: cuda:1
+
+# Data source = crawl DB (full metadata/platform/tags for traceability).
+# task_id is used as the on-disk id so every segment traces back to its DB row.
+crawl_source:
+  backend: db                              # "db" = direct Postgres, "api" = HTTP
+  # Direct Postgres. Requires the crawl compose `db` port published on the host
+  # (docker compose up -d db). Blank creds fall back to social-video-crawl/.env.
+  db_host: ${oc.env:CRAWL_DB_HOST,localhost}
+  db_port: ${oc.env:CRAWL_DB_PORT,5432}
+  db_user: ${oc.env:CRAWL_DB_USER,}        # empty → POSTGRES_USER from .env
+  db_password: ${oc.env:CRAWL_DB_PASSWORD,} # empty → POSTGRES_PASSWORD from .env
+  db_name: ${oc.env:CRAWL_DB_NAME,}        # empty → POSTGRES_DBNAME from .env
+  # HTTP API fallback (backend: api).
+  api_url: ${oc.env:CRAWL_API_URL,http://localhost:8010}
+  api_token: ${oc.env:CRAWL_API_TOKEN,}   # empty → read API_TOKEN from social-video-crawl/.env
+  platforms: []                            # [] = all platforms
+  tag_family: [stt, tts]                   # → crawl tag ids
+  status: completed
+  page_limit: 1000
+  max_items: null                          # null = whole DB (resumable)
+  language: vi
+  keep_meta: true                          # write meta/{task_id}.json for debugging
+  # Creds fall back to social-video-crawl/.env when blank. NOTE: .env's
+  # MINIO_BUCKET (social-media-downloader2) is empty — the real data bucket is
+  # social-media-downloader, set explicitly here so it wins.
+  minio_endpoint: ${oc.env:MINIO_ENDPOINT,hcm04.vstorage.vngcloud.vn}
+  minio_access_key: ${oc.env:MINIO_ACCESS_KEY,}
+  minio_secret_key: ${oc.env:MINIO_SECRET_KEY,}
+  minio_bucket: social-media-downloader
+  minio_region: ${oc.env:MINIO_REGION,HCM04}
+  minio_secure: true
+
+# Parallel + disk-bounded knobs. GPU0 (4090) is busy with services → use GPU1.
+stream:
+  batch_size: 32              # items per worker run() (amortizes model load)
+  download_workers: 16        # prefetch threads (128 CPUs available)
+  gpu_workers: 3              # concurrent pipeline workers on cuda:1 (~58GB free)
+  devices: [cuda:1]
+  queue_size: 32              # caps staged raw files on disk
+  keep_raw: false             # delete staged source audio after processing
+  keep_extracted: false       # delete 16k extracted intermediates
+  manifest_flush_every: 5     # rewrite manifest every N batches
+
+# SNR gate (numpy, no model): drop very noisy files before VAD.
+audio_quality:
+  enabled: true
+  backend: snr
+  min_snr_db: 3.0
+
+vad:
+  backend: silero
+  device: cpu
+  enable_prefilter: true
+  min_speech_ratio: 0.2
+  enable_trim: true
+  trim_pad_s: 0.15
+  min_duration: 1.0
+  max_duration: 30.0
+
+diarize:
+  backend: sortformer
+  model_path: models/diar_streaming_sortformer_4spk-v2.1.nemo
+  device: cuda:1
+  detect_overlap: true
+  overlap_min_s: 0.25
+
+speaker_verify:
+  enabled: true
+  url: http://localhost:2010/embed
+  cluster_threshold: 0.45
+  ambiguous_max: 0.30
+  drop_ambiguous: true
+
+# Primary ASR anchor = Fun-ASR-MLT as a local REST service (OpenAI Audio API).
+# base_url set → the stage calls the service (GPU decided by the service), no in-venv.
+transcribe:
+  base_url: ${oc.env:ASR_URL,http://127.0.0.1:9102}
+  model: FunAudioLLM/Fun-ASR-MLT-Nano-2512
+  language: vi
+
+# Word-level ROVER: fuse the Fun-ASR anchor with DIFFERENT backends + VTT subtitle.
+# Anchor words are kept unless out-voted (subtitle weighted higher), preserving
+# punctuation while correcting wrong words. NOTE: the `transcribe` anchor already
+# IS Fun-ASR-MLT, so `funasr_mlt` is NOT listed here (same model = redundant vote);
+# only genuinely different models add diversity. Disable a backend (or stop its
+# vLLM server) with enabled:false — qwen3_vllm needs the :8101 server up.
+stage_configs:
+  transcript_refine:
+    ensemble_strategy: rover
+    use_subtitle: true
+    subtitle_weight: 1.5
+    min_agree: 2
+    # Forced alignment gives text-only backends (vietasr, qwen3) word timestamps so
+    # they join word-level voting. mms_fa runs in-venv. For best Vietnamese quality
+    # serve Qwen3-ForcedAligner in a separate venv and switch to qwen3_service:
+    #   (sep venv) uv pip install qwen-asr fastapi "uvicorn[standard]" python-multipart
+    #   CUDA_VISIBLE_DEVICES=1 python scripts/serve_qwen3_aligner.py --port 8103
+    #   then: align_backend: qwen3_service / align_kwargs: {base_url: http://127.0.0.1:8103}
+    align_backend: mms_fa
+    align_device: cuda:1
+    align_language: Vietnamese
+    # Every ASR voter is a local REST service speaking the OpenAI Audio API; the
+    # unified `openai_transcription` client hits them all (swap/extend by URL). Each
+    # model's GPU is decided by its own service (docker compose / CUDA_VISIBLE_DEVICES),
+    # not by `device` here. Text-only services get word timestamps from mms_fa above.
+    backends:
+      - name: openai_transcription          # VietASR (service)
+        enabled: true
+        kwargs:
+          base_url: ${oc.env:VIETASR_URL,http://127.0.0.1:9104}
+          language: vi
+      - name: openai_transcription          # Qwen3-ASR-1.7B (vLLM)
+        enabled: true
+        kwargs:
+          base_url: ${oc.env:QWEN_ASR_URL,http://127.0.0.1:8101}
+          model: Qwen/Qwen3-ASR-1.7B
+          language: vi
+      - name: openai_transcription          # nemotron-3.5-streaming (service)
+        enabled: true
+        kwargs:
+          base_url: ${oc.env:NEMOTRON_URL,http://127.0.0.1:9103}
+          language: vi-VN
+
+consensus:
+  tolerance_s: 0.3
+  min_overlap_iou: 0.4
+  min_alignment_score: 0.5
+  require_asr_agreement: false
+  drop_on_disagreement: true
+  require_subtitle_agreement: true
+  subtitle_min_similarity: 0.3
+
+gender:
+  url: http://localhost:8000/predict
+  model: ensemble
+  timeout: 30
+
+manifest:
+  output_filename: manifest.jsonl
+  text_field: text_itn
+  shard_by: platform

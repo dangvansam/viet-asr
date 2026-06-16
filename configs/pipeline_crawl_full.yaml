@@ -1,0 +1,81 @@
+# Production chain: single-speaker + multi-speaker-overlap segments, 2-form text
+# (raw + ITN/PnC), full attribute tags. Heavy models run sequentially (load/unload).
+pipeline_name: crawl_full
+stages:
+  - crawl_seed
+  - extract_audio
+  - audio_quality      # SNR gate: drop very noisy files before VAD
+  - vad
+  - vad_diarize        # sortformer: per-speaker turns + native overlap flag
+  - speaker_verify     # verify/correct speaker labels (ECAPA /embed)
+  - transcribe         # Fun-ASR-MLT: text (ITN+PnC) + text_raw (spoken) + timestamps
+  - multitalker_reprocess  # overlap segments → per-speaker transcripts
+  - gender_classify
+  - consensus
+  - filter
+  - write_manifest
+
+output_dir: /home/samdv/DATA/crawl-2026
+device: cuda
+
+crawl_seed:
+  seed_path: /home/samdv/DATA/crawl-2026/_seed/seed.jsonl
+
+audio_quality:
+  enabled: true
+  backend: snr
+  min_snr_db: 3.0
+
+vad:
+  backend: silero
+  device: cpu
+  enable_prefilter: true
+  min_speech_ratio: 0.05
+  enable_trim: true
+  trim_pad_s: 0.15
+  min_duration: 1.0
+  max_duration: 30.0
+
+diarize:
+  backend: sortformer
+  model_path: models/diar_streaming_sortformer_4spk-v2.1.nemo
+  device: cuda
+  detect_overlap: true
+  overlap_min_s: 0.25
+
+speaker_verify:
+  enabled: true
+  url: http://localhost:2010/embed
+  cluster_threshold: 0.45
+  ambiguous_max: 0.30
+  drop_ambiguous: true
+
+transcribe:
+  base_url: ${oc.env:ASR_URL,http://127.0.0.1:9102}
+  model: FunAudioLLM/Fun-ASR-MLT-Nano-2512
+  language: vi
+
+# Re-transcribe overlap segments per-speaker with the multitalker model.
+overlap_reprocess:
+  enabled: true
+  asr_model_path: models/multitalker-vietnamese.nemo
+  diar_model_path: models/diar_streaming_sortformer_4spk-v2.1.nemo
+  device: cuda
+
+gender:
+  url: http://localhost:8000/predict
+  model: ensemble
+
+consensus:
+  tolerance_s: 0.3
+  min_overlap_iou: 0.4
+  min_alignment_score: 0.5
+  require_asr_agreement: false
+  drop_on_disagreement: true
+  require_subtitle_agreement: false
+  subtitle_min_similarity: 0.3
+
+manifest:
+  output_filename: manifest.jsonl
+  text_field: text_itn
+  shard_by: platform

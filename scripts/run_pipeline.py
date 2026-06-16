@@ -55,6 +55,14 @@ def main() -> None:
     }
     pipeline = DataPipeline.from_yaml(args.config, **overrides)
 
+    # checkpoint_dir is derived from the YAML output_dir at load time; when
+    # --output_dir overrides it, keep the checkpoint under the new dir (avoids
+    # picking up a stale state file from the config's default location).
+    if args.output_dir:
+        pipeline._config.checkpoint_dir = str(Path(args.output_dir) / "checkpoints")
+        if getattr(pipeline, "_checkpoint", None) is not None:
+            pipeline._checkpoint = type(pipeline._checkpoint)(pipeline._config.checkpoint_dir)
+
     if args.enrich_metadata:
         pipeline._config.enrich.metadata_path = args.enrich_metadata
 
