@@ -29,3 +29,5 @@ wandb
 .rune/metrics
 .gitnexus
 .claude/
+.vscode
+.rune
