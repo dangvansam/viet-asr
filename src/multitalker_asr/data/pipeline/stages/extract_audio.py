@@ -37,14 +37,14 @@ class ExtractAudioStage(BaseStage):
         def extract(record: Dict) -> Dict:
             src = record.get("audio_filepath") or record.get("source_video", "")
             if not src:
-                logger.warning(f"Record {record['id']} has no source file, skipping")
-                return record
+                logger.warning(f"Record {record['id']} has no source file, dropping")
+                return None
             out_path = str(out_dir / f"{record['id']}.wav")
             try:
                 duration = self._extract_one(src, out_path)
             except subprocess.CalledProcessError as e:
-                logger.error(f"ffmpeg failed for {src}: {e}")
-                return record
+                logger.error(f"ffmpeg failed for {src}, dropping {record['id']}: {e}")
+                return None
             record = dict(record)
             record["audio_filepath"] = out_path
             record["duration"] = duration
@@ -52,7 +52,7 @@ class ExtractAudioStage(BaseStage):
             return record
 
         workers = getattr(config, "concurrency", 1) or 1
-        processed = parallel_map(extract, to_process, workers)
+        processed = [r for r in parallel_map(extract, to_process, workers) if r is not None]
         for record in to_process:
             checkpoint.mark_processed(record["id"], self.name)
         checkpoint.save_state()
