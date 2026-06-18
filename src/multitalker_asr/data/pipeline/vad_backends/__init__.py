@@ -6,9 +6,13 @@ from .base import (
     VADResult,
     VADSegment,
     assemble_frames,
+    dynamic_merge_segments,
+    lookup_silence_s,
     merge_segments,
+    normalize_silence_schedule,
 )
 from .consensus import ConsensusVADBackend
+from .dynamic import DynamicVADBackend
 from .fsmn_vad import FsmnVADBackend
 from .pyannote_seg import PyannoteSegmentationVADBackend
 from .service import ServiceVADBackend
@@ -22,6 +26,7 @@ VAD_REGISTRY: Dict[str, Type[BaseVADBackend]] = {
     "ten": TenVADBackend,
     "pyannote_seg": PyannoteSegmentationVADBackend,
     "consensus": ConsensusVADBackend,
+    "dynamic": DynamicVADBackend,
     "service": ServiceVADBackend,
 }
 
@@ -49,11 +54,15 @@ __all__ = [
     "VADSegment",
     "assemble_frames",
     "merge_segments",
+    "dynamic_merge_segments",
+    "lookup_silence_s",
+    "normalize_silence_schedule",
     "SileroVADBackend",
     "FsmnVADBackend",
     "TenVADBackend",
     "PyannoteSegmentationVADBackend",
     "ConsensusVADBackend",
+    "DynamicVADBackend",
     "ServiceVADBackend",
     "VAD_REGISTRY",
     "register_vad_backend",

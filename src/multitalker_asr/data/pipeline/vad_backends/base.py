@@ -1,6 +1,7 @@
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 
@@ -105,3 +106,74 @@ def assemble_frames(
         spans.append(VADSegment(start_idx * frame_dur, len(flags) * frame_dur))
 
     return merge_segments(spans, min_gap_s=min_gap_s, min_dur_s=min_dur_s)
+
+
+def normalize_silence_schedule(
+    schedule: List[Tuple[float, float]],
+) -> List[Tuple[float, float]]:
+    """Coerce a YAML/JSON silence schedule into a sorted list of float tuples.
+
+    Each entry is ``(accumulated_ms_limit, silence_threshold_ms)``. A ``None`` or
+    non-finite final limit (YAML has no ``inf``) is treated as ``float('inf')`` so the
+    last bucket catches all longer accumulations. Sorted ascending by limit.
+    """
+    if not schedule:
+        raise VADBackendError("silence_schedule is empty")
+    normalized: List[Tuple[float, float]] = []
+    for limit, silence in schedule:
+        if limit is None or not math.isfinite(float(limit)):
+            limit_ms = float("inf")
+        else:
+            limit_ms = float(limit)
+        normalized.append((limit_ms, float(silence)))
+    return sorted(normalized, key=lambda x: x[0])
+
+
+def lookup_silence_s(accumulated_s: float, schedule: List[Tuple[float, float]]) -> float:
+    """Silence threshold (seconds) for the current accumulated speech (seconds).
+
+    The threshold shrinks as accumulated speech grows: the first bucket whose
+    ``limit_ms`` is >= the accumulated duration wins. ``schedule`` must already be
+    normalized (sorted ascending by limit).
+    """
+    accumulated_ms = accumulated_s * 1000.0
+    for limit_ms, silence_ms in schedule:
+        if accumulated_ms <= limit_ms:
+            return silence_ms / 1000.0
+    return schedule[-1][1] / 1000.0
+
+
+def dynamic_merge_segments(
+    segments: List[VADSegment],
+    silence_schedule: List[Tuple[float, float]],
+    min_dur_s: float = 0.0,
+    pad_s: float = 0.0,
+) -> List[VADSegment]:
+    """Re-cut/merge segments with a duration-adaptive silence threshold.
+
+    Walks segments left-to-right accumulating speech since the last cut. A gap is
+    merged when it is shorter than the schedule's threshold for the current
+    accumulation (short utterances tolerate longer silences), otherwise it cuts
+    (long runs cut on even short silences). Pure function — no models, no I/O.
+    """
+    if not segments:
+        return []
+
+    sched = normalize_silence_schedule(silence_schedule)
+    ordered = sorted(segments, key=lambda s: s.start)
+
+    merged: List[VADSegment] = []
+    current = VADSegment(ordered[0].start, ordered[0].end)
+    accumulated = current.duration
+    for seg in ordered[1:]:
+        gap = seg.start - current.end
+        if gap <= lookup_silence_s(accumulated, sched):
+            current.end = max(current.end, seg.end)
+            accumulated += seg.duration
+        else:
+            merged.append(current)
+            current = VADSegment(seg.start, seg.end)
+            accumulated = seg.duration
+    merged.append(current)
+
+    return merge_segments(merged, min_gap_s=0.0, min_dur_s=min_dur_s, pad_s=pad_s)

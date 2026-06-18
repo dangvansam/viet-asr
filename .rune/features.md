@@ -12,6 +12,7 @@
 | **Multi-Task Paralinguistic (SenseVoice-style)** | **Planned** | models/multitask_model.py, models/prompt_embedding.py | Phase 1-2 |
 | **Extended Data Pipeline** | **Planned** | data/datasets/multitask.py, data/collators/multitask.py | Phase 3 |
 | **Data Processing Pipeline** | **Planned** | data/pipeline/pipeline.py, data/pipeline/stages/, scripts/prepare_data.py | Standalone |
+| **Dynamic VAD (backend-agnostic)** | **Planned** | data/pipeline/vad_backends/dynamic.py, vad_backends/base.py, scripts/benchmark_vad_providers.py | Data Processing Pipeline (VAD layer) |
 | **Curriculum Training** | **Planned** | training/curriculum_trainer.py | Phase 4 |
 | **EOU Detection** | **Planned** | models/vocab_extension.py | Phase 5 |
 | **ITN/PnC Post-Processing** | **Planned** | inference/post_processor.py | Phase 5, FunASR |
