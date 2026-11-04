@@ -126,6 +126,36 @@ TEST(VietAsrBatch, SilenceAndLowNoiseGiveEmptyTranscript) {
     vietasr_pipeline_free(pipeline);
 }
 
+TEST(LongAudioSplitter, WindowsStayBelowLimitAndCoverInput) {
+    std::vector<float> pcm(16000 * 100, 0.1f);
+    for (std::size_t i = 16000 * 37; i < 16000 * 37 + 2000; ++i) pcm[i] = 0.0f;
+    auto spans = LongAudioSplitter::Split(pcm, 16000 * 39, 16000 * 3);
+    ASSERT_GE(spans.size(), 3u);
+    std::size_t covered = 0;
+    for (const auto& s : spans) {
+        EXPECT_LE(s.second, 16000u * 39u);
+        EXPECT_EQ(s.first, covered);
+        covered += s.second;
+    }
+    EXPECT_EQ(covered, pcm.size());
+    EXPECT_GT(spans[0].second, 16000u * 37u);
+    EXPECT_LT(spans[0].second, 16000u * 37u + 2000u);
+}
+
+TEST(WordGrouper, GroupsBpePiecesIntoTimedWords) {
+    PostProcessor post;
+    std::vector<std::string> tokens = {"\xe2\x96\x81" "Xin", "\xe2\x96\x81" "ch", "\xc3\xa0" "o", "."};
+    std::vector<int> frames = {10, 20, 22, 23};
+    auto words = WordGrouper::Group(tokens, frames, 0.04, 1.0, 2.5, post);
+    ASSERT_EQ(words.size(), 2u);
+    EXPECT_EQ(words[0].word, "Xin");
+    EXPECT_NEAR(words[0].start_s, 1.40, 1e-9);
+    EXPECT_NEAR(words[0].end_s, 1.80, 1e-9);
+    EXPECT_EQ(words[1].word, "ch\xc3\xa0" "o.");
+    EXPECT_NEAR(words[1].start_s, 1.80, 1e-9);
+    EXPECT_NEAR(words[1].end_s, 2.50, 1e-9);
+}
+
 TEST(VietAsrStreaming, LongSilentStreamCompletes) {
     if (std::getenv("VIETASR_SLOW_TESTS") == nullptr) {
         GTEST_SKIP() << "set VIETASR_SLOW_TESTS=1 to run";

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "modules/vietasr/post_processor.h"
@@ -16,10 +17,22 @@
 
 namespace vietasr {
 
+struct WordTiming final {
+    std::string word;
+    double start_s;
+    double end_s;
+};
+
+struct Recognition final {
+    std::string text;
+    std::vector<WordTiming> words;
+};
+
 struct AsrSegment final {
     std::string text;
     double start_s;
     double end_s;
+    std::vector<WordTiming> words;
 };
 
 struct VietAsrConfig final {
@@ -29,6 +42,7 @@ struct VietAsrConfig final {
     bool emit_segments{false};
     bool emit_voiced_regions{false};
     bool itn{false};
+    bool emit_words{false};
     std::string model_dir;
     UtteranceSegmenterConfig segmenter;
 
@@ -38,6 +52,23 @@ struct VietAsrConfig final {
 class SignalLevel final {
 public:
     static double Rms(const std::vector<float>& pcm);
+};
+
+class LongAudioSplitter final {
+public:
+    static std::vector<std::pair<std::size_t, std::size_t>> Split(const std::vector<float>& pcm,
+                                                                  std::size_t max_samples,
+                                                                  std::size_t search_samples);
+};
+
+class WordGrouper final {
+public:
+    static std::vector<WordTiming> Group(const std::vector<std::string>& tokens,
+                                         const std::vector<int>& frames,
+                                         double frame_seconds,
+                                         double offset_s,
+                                         double window_end_s,
+                                         const PostProcessor& post);
 };
 
 class SegmentJoiner final {
@@ -51,9 +82,11 @@ public:
                       std::shared_ptr<const Units> units,
                       int max_active_paths);
 
-    std::string Transcribe(const std::vector<float>& pcm) const;
+    Recognition Transcribe(const std::vector<float>& pcm, double offset_s) const;
 
 private:
+    Recognition TranscribeWindow(const std::vector<float>& pcm, double offset_s) const;
+
     std::shared_ptr<const TransducerModel> model_;
     std::shared_ptr<const Units> units_;
     KaldiFbank fbank_;
@@ -80,7 +113,7 @@ public:
 
 private:
     void DecodeCompleted();
-    void CommitText(std::string text, double start_s, double end_s);
+    void CommitText(Recognition recognition, double start_s, double end_s);
     void UpdatePartial();
     void Emit(ResultBuilder* out) const;
     void EmitSegments(ResultBuilder* out) const;

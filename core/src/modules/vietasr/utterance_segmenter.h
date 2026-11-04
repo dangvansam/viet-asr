@@ -21,6 +21,11 @@ struct UtteranceSegmenterConfig final {
     int speech_pad_ms{1000};
     int max_utterance_ms{30000};
     int split_search_ms{3000};
+    bool adaptive_silence{true};
+    int adaptive_short_ms{4000};
+    int adaptive_long_ms{10000};
+    int adaptive_mid_silence_ms{500};
+    int adaptive_long_silence_ms{300};
     int sample_rate{16000};
 };
 
@@ -55,6 +60,7 @@ private:
     void CloseUtterance(std::int64_t end_sample);
     void SplitLongUtterance();
     std::int64_t MsToSamples(int ms) const;
+    std::int64_t RequiredSilence() const;
 
     UtteranceSegmenterConfig config_;
     std::unique_ptr<vad::VadBackend> backend_;

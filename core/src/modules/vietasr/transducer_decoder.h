@@ -15,7 +15,8 @@ public:
     TransducerDecoder(std::shared_ptr<const TransducerModel> model,
                       const TransducerSearchConfig& config);
 
-    Status Decode(const EncoderOutput& encoder_out, std::vector<int>* tokens) const;
+    Status Decode(const EncoderOutput& encoder_out, std::vector<int>* tokens,
+                  std::vector<int>* frames = nullptr) const;
 
 private:
     std::shared_ptr<const TransducerModel> model_;

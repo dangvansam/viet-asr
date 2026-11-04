@@ -32,6 +32,7 @@ TransducerBeamSearch::TransducerBeamSearch(const TransducerSearchConfig& config)
 void TransducerBeamSearch::Begin() {
     hyps_.clear();
     decoder_cache_.clear();
+    frame_ = 0;
     TransducerHypothesis start;
     start.ys.assign(static_cast<std::size_t>(config_.context_size - 1), -1);
     start.ys.push_back(config_.blank_id);
@@ -108,6 +109,7 @@ void TransducerBeamSearch::AcceptLogits(const std::vector<float>& logits, int ba
         TransducerHypothesis hyp = hyps_[c.hyp];
         if (c.token != config_.blank_id && c.token != config_.unk_id) {
             hyp.ys.push_back(c.token);
+            hyp.frames.push_back(frame_);
         }
         hyp.log_prob = c.score;
         auto same = std::find_if(next.begin(), next.end(),
@@ -119,22 +121,34 @@ void TransducerBeamSearch::AcceptLogits(const std::vector<float>& logits, int ba
         }
     }
     hyps_ = std::move(next);
+    ++frame_;
 }
 
-std::vector<int> TransducerBeamSearch::BestTokens() const {
-    std::vector<int> tokens;
-    if (hyps_.empty()) return tokens;
-    auto score = [&](const TransducerHypothesis& h) {
+const TransducerHypothesis* TransducerBeamSearch::Best() const {
+    if (hyps_.empty()) return nullptr;
+    auto score = [](const TransducerHypothesis& h) {
         return h.log_prob / static_cast<double>(h.ys.size());
     };
     const TransducerHypothesis* best = &hyps_.front();
     for (const auto& hyp : hyps_) {
         if (score(hyp) > score(*best)) best = &hyp;
     }
+    return best;
+}
+
+std::vector<int> TransducerBeamSearch::BestTokens() const {
+    std::vector<int> tokens;
+    const TransducerHypothesis* best = Best();
+    if (best == nullptr) return tokens;
     for (std::size_t i = static_cast<std::size_t>(config_.context_size); i < best->ys.size(); ++i) {
         tokens.push_back(static_cast<int>(best->ys[i]));
     }
     return tokens;
+}
+
+std::vector<int> TransducerBeamSearch::BestFrames() const {
+    const TransducerHypothesis* best = Best();
+    return best == nullptr ? std::vector<int>() : best->frames;
 }
 
 }

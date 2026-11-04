@@ -9,7 +9,8 @@ TransducerDecoder::TransducerDecoder(std::shared_ptr<const TransducerModel> mode
     : model_(std::move(model)), config_(config) {}
 
 Status TransducerDecoder::Decode(const EncoderOutput& encoder_out,
-                                 std::vector<int>* tokens) const {
+                                 std::vector<int>* tokens,
+                                 std::vector<int>* frames) const {
     tokens->clear();
     if (!model_) return Status::Error(-6, "transducer: model not loaded");
     TransducerBeamSearch search(config_);
@@ -34,6 +35,7 @@ Status TransducerDecoder::Decode(const EncoderOutput& encoder_out,
         search.AcceptLogits(logits, batch);
     }
     *tokens = search.BestTokens();
+    if (frames != nullptr) *frames = search.BestFrames();
     return Status::Ok();
 }
 

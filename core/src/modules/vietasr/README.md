@@ -6,7 +6,7 @@ ITN or punctuation pass.
 
 ```
 pcm 16 kHz ─► Silero VAD segmenter ─► Kaldi fbank (80) ─► encoder ─► modified beam search ─► text
-              (pauses ≥ 1.2 s, ≤ 30 s)                     (ORT)     (decoder + joiner, 4 paths)
+              (adaptive pauses, ≤ 30 s)                     (ORT)     (decoder + joiner, 4 paths)
 ```
 
 ## Output fields
@@ -36,16 +36,33 @@ Pass a JSON object to `pipeline.add("vietasr", {...})`:
 | `num_threads` | int | `1` | Encoder intra-op threads |
 | `partial_interval_ms` | int | `640` | Min audio between partial re-decodes (grows to 25 % of the utterance) |
 | `emit_segments` | bool | `false` | Emit per-sentence `segments[]` |
+| `emit_words` | bool | `false` | Add `words[]` (`word`, `start`, `end`) to every segment; implies `emit_segments` |
 | `emit_voiced_regions` | bool | `false` | Emit `voiced_regions` + `speech` |
 | `vad_backend` | string | `silero` | `silero` / `tenvad` / `energy` |
 | `vad_threshold` | float | `0.5` | Speech probability cutoff |
-| `min_silence_ms` | int | `1200` | Pause that ends an utterance |
+| `min_silence_ms` | int | `1200` | Pause that ends a short utterance |
+| `adaptive_silence` | bool | `true` | Shorten the required pause as the utterance grows |
+| `adaptive_short_ms` / `adaptive_mid_silence_ms` | int | `4000` / `500` | After 4 s of speech, a 500 ms pause ends the utterance |
+| `adaptive_long_ms` / `adaptive_long_silence_ms` | int | `10000` / `300` | After 10 s of speech, a 300 ms pause ends the utterance |
 | `speech_pad_ms` | int | `1000` | Audio kept around each utterance |
-| `max_utterance_ms` | int | `30000` | Longer speech is split at the quietest point of the last 3 s |
+| `max_utterance_ms` | int | `30000` | Longer speech is split at the quietest point of the last 3 s (capped at 38 s — the encoder accepts ≤ 40 s) |
 | `model_dir` | string | — | Load `encoder/decoder/joiner(.int8).onnx` + `tokens.txt` from a folder instead of the embedded model |
 | `itn` | bool | `false` | Extra rule-based ITN pass (rarely needed — the model already does ITN) |
 
 Model lookup order: `model_dir` → `$VIETASR_ASR_MODEL_DIR` → embedded → `<cache>/vietasr/`.
+
+## Word timestamps
+
+`{"emit_words": true}` adds per-word times taken from the transducer itself: a word
+starts at the 40 ms encoder frame where its first BPE piece is emitted (identical to
+sherpa-onnx token timestamps) and ends where the next word starts, capped at 1 s.
+
+```json
+{"text": "Đây là tháng", "start": 0.0, "end": 1.2,
+ "words": [{"word": "Đây", "start": 0.0, "end": 0.64},
+           {"word": "là", "start": 0.64, "end": 0.92},
+           {"word": "tháng", "start": 0.92, "end": 1.16}]}
+```
 
 ## Streaming
 

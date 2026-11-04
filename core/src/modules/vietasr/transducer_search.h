@@ -18,6 +18,7 @@ struct TransducerSearchConfig final {
 
 struct TransducerHypothesis final {
     std::vector<std::int64_t> ys;
+    std::vector<int> frames;
     double log_prob{0.0};
 };
 
@@ -37,14 +38,17 @@ public:
     void AcceptLogits(const std::vector<float>& logits, int batch);
 
     std::vector<int> BestTokens() const;
+    std::vector<int> BestFrames() const;
     int num_hypotheses() const { return static_cast<int>(hyps_.size()); }
 
 private:
     std::vector<std::int64_t> ContextOf(const TransducerHypothesis& hyp) const;
+    const TransducerHypothesis* Best() const;
 
     TransducerSearchConfig config_;
     std::vector<TransducerHypothesis> hyps_;
     std::map<std::vector<std::int64_t>, std::vector<float>> decoder_cache_;
+    int frame_{0};
 };
 
 }

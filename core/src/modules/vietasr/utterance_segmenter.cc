@@ -18,6 +18,14 @@ std::int64_t UtteranceSegmenter::MsToSamples(int ms) const {
     return static_cast<std::int64_t>(ms) * config_.sample_rate / 1000;
 }
 
+std::int64_t UtteranceSegmenter::RequiredSilence() const {
+    if (!config_.adaptive_silence) return MsToSamples(config_.min_silence_ms);
+    std::int64_t length = static_cast<std::int64_t>(active_.size());
+    if (length >= MsToSamples(config_.adaptive_long_ms)) return MsToSamples(config_.adaptive_long_silence_ms);
+    if (length >= MsToSamples(config_.adaptive_short_ms)) return MsToSamples(config_.adaptive_mid_silence_ms);
+    return MsToSamples(config_.min_silence_ms);
+}
+
 void UtteranceSegmenter::Reset() {
     if (backend_) backend_->Reset();
     accumulator_.Reset();
@@ -96,7 +104,7 @@ void UtteranceSegmenter::ProcessChunk(const float* chunk, std::size_t n, std::si
         voiced_samples_ += static_cast<std::int64_t>(n);
     } else {
         silence_run_ += static_cast<std::int64_t>(n);
-        if (silence_run_ >= MsToSamples(config_.min_silence_ms)) {
+        if (silence_run_ >= RequiredSilence()) {
             CloseUtterance(last_voiced_end_ + MsToSamples(config_.speech_pad_ms));
             return;
         }

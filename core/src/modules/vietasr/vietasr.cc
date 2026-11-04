@@ -21,6 +21,12 @@ constexpr int kSampleRate = 16000;
 constexpr std::size_t kMinDecodeSamples = 1600;
 constexpr std::size_t kStreamingFrameLimit = 2 * kSampleRate;
 constexpr double kFallbackMinRms = 0.003;
+constexpr std::size_t kMaxWindowSamples = 39 * kSampleRate;
+constexpr std::size_t kSplitSearchSamples = 3 * kSampleRate;
+constexpr std::size_t kEnergyHop = 512;
+constexpr int kMaxUtteranceMs = 38000;
+constexpr double kEncoderFrameSeconds = 0.04;
+constexpr double kMaxWordSeconds = 1.0;
 
 int ReadInt(const std::string& json, const char* key, int fallback) {
     double value = 0.0;
@@ -53,6 +59,8 @@ VietAsrConfig VietAsrConfig::Parse(const std::string& json) {
     cfg.emit_segments = ReadBool(json, "emit_segments", cfg.emit_segments);
     cfg.emit_voiced_regions = ReadBool(json, "emit_voiced_regions", cfg.emit_voiced_regions);
     cfg.itn = ReadBool(json, "itn", cfg.itn);
+    cfg.emit_words = ReadBool(json, "emit_words", cfg.emit_words);
+    if (cfg.emit_words) cfg.emit_segments = true;
     JsonGetString(json, "model_dir", &cfg.model_dir);
     JsonGetString(json, "vad_backend", &cfg.segmenter.backend);
     double threshold = 0.0;
@@ -62,9 +70,75 @@ VietAsrConfig VietAsrConfig::Parse(const std::string& json) {
     cfg.segmenter.min_silence_ms = ReadInt(json, "min_silence_ms", cfg.segmenter.min_silence_ms);
     cfg.segmenter.min_speech_ms = ReadInt(json, "min_speech_ms", cfg.segmenter.min_speech_ms);
     cfg.segmenter.speech_pad_ms = ReadInt(json, "speech_pad_ms", cfg.segmenter.speech_pad_ms);
-    cfg.segmenter.max_utterance_ms = std::max(2000, ReadInt(json, "max_utterance_ms", cfg.segmenter.max_utterance_ms));
+    cfg.segmenter.max_utterance_ms = std::clamp(ReadInt(json, "max_utterance_ms", cfg.segmenter.max_utterance_ms), 2000, kMaxUtteranceMs);
+    cfg.segmenter.adaptive_silence = ReadBool(json, "adaptive_silence", cfg.segmenter.adaptive_silence);
+    cfg.segmenter.adaptive_short_ms = ReadInt(json, "adaptive_short_ms", cfg.segmenter.adaptive_short_ms);
+    cfg.segmenter.adaptive_long_ms = ReadInt(json, "adaptive_long_ms", cfg.segmenter.adaptive_long_ms);
+    cfg.segmenter.adaptive_mid_silence_ms = ReadInt(json, "adaptive_mid_silence_ms", cfg.segmenter.adaptive_mid_silence_ms);
+    cfg.segmenter.adaptive_long_silence_ms = ReadInt(json, "adaptive_long_silence_ms", cfg.segmenter.adaptive_long_silence_ms);
     cfg.segmenter.sample_rate = kSampleRate;
     return cfg;
+}
+
+std::vector<std::pair<std::size_t, std::size_t>> LongAudioSplitter::Split(const std::vector<float>& pcm,
+                                                                          std::size_t max_samples,
+                                                                          std::size_t search_samples) {
+    std::vector<std::pair<std::size_t, std::size_t>> spans;
+    std::size_t start = 0;
+    while (pcm.size() - start > max_samples) {
+        std::size_t end = start + max_samples;
+        std::size_t from = end > search_samples + start ? end - search_samples : start;
+        std::size_t cut = end;
+        double best = -1.0;
+        for (std::size_t pos = from; pos + kEnergyHop <= end; pos += kEnergyHop) {
+            double energy = 0.0;
+            for (std::size_t i = pos; i < pos + kEnergyHop; ++i) energy += static_cast<double>(pcm[i]) * pcm[i];
+            if (best < 0.0 || energy < best) {
+                best = energy;
+                cut = pos + kEnergyHop / 2;
+            }
+        }
+        spans.emplace_back(start, cut - start);
+        start = cut;
+    }
+    if (pcm.size() > start) spans.emplace_back(start, pcm.size() - start);
+    return spans;
+}
+
+std::vector<WordTiming> WordGrouper::Group(const std::vector<std::string>& tokens,
+                                           const std::vector<int>& frames,
+                                           double frame_seconds,
+                                           double offset_s,
+                                           double window_end_s,
+                                           const PostProcessor& post) {
+    std::vector<WordTiming> words;
+    std::vector<std::string> pieces;
+    int first = 0;
+    int last = 0;
+    auto flush = [&]() {
+        if (pieces.empty()) return;
+        std::string word = post.Detokenize(pieces);
+        if (!word.empty()) {
+            words.push_back(WordTiming{word, offset_s + first * frame_seconds, offset_s + (last + 1) * frame_seconds});
+        }
+        pieces.clear();
+    };
+    for (std::size_t i = 0; i < tokens.size() && i < frames.size(); ++i) {
+        bool starts_word = tokens[i].rfind("\xe2\x96\x81", 0) == 0;
+        if (starts_word || pieces.empty()) {
+            flush();
+            first = frames[i];
+        }
+        pieces.push_back(tokens[i]);
+        last = frames[i];
+    }
+    flush();
+    for (std::size_t i = 0; i < words.size(); ++i) {
+        double limit = i + 1 < words.size() ? words[i + 1].start_s : window_end_s;
+        double end = std::min(limit, words[i].start_s + kMaxWordSeconds);
+        words[i].end_s = std::max(words[i].end_s, end);
+    }
+    return words;
 }
 
 std::string SegmentJoiner::Join(const std::vector<AsrSegment>& segments, const std::string& partial) {
@@ -88,26 +162,46 @@ VietAsrRecognizer::VietAsrRecognizer(std::shared_ptr<const TransducerModel> mode
       units_(std::move(units)),
       decoder_(model, TransducerSearchConfig{max_active_paths, model->context_size(), model->blank_id(), 2}) {}
 
-std::string VietAsrRecognizer::Transcribe(const std::vector<float>& pcm) const {
-    if (pcm.size() < kMinDecodeSamples) return std::string();
+Recognition VietAsrRecognizer::Transcribe(const std::vector<float>& pcm, double offset_s) const {
+    if (pcm.size() <= kMaxWindowSamples) return TranscribeWindow(pcm, offset_s);
+    Recognition out;
+    for (const auto& span : LongAudioSplitter::Split(pcm, kMaxWindowSamples, kSplitSearchSamples)) {
+        std::vector<float> window(pcm.begin() + static_cast<std::ptrdiff_t>(span.first),
+                                  pcm.begin() + static_cast<std::ptrdiff_t>(span.first + span.second));
+        Recognition part = TranscribeWindow(window, offset_s + static_cast<double>(span.first) / kSampleRate);
+        if (part.text.empty()) continue;
+        if (!out.text.empty()) out.text.push_back(' ');
+        out.text += part.text;
+        out.words.insert(out.words.end(), part.words.begin(), part.words.end());
+    }
+    return out;
+}
+
+Recognition VietAsrRecognizer::TranscribeWindow(const std::vector<float>& pcm, double offset_s) const {
+    Recognition out;
+    if (pcm.size() < kMinDecodeSamples) return out;
     std::vector<float> features = fbank_.Compute(pcm.data(), pcm.size());
     int frames = static_cast<int>(features.size() / static_cast<std::size_t>(fbank_.num_bins()));
     EncoderOutput encoded;
     Status status = model_->Encode(features, frames, &encoded);
     if (!status.ok()) {
         VIETASR_LOG_WARN("vietasr") << "encode failed: " << status.message();
-        return std::string();
+        return out;
     }
     std::vector<int> ids;
-    status = decoder_.Decode(encoded, &ids);
+    std::vector<int> token_frames;
+    status = decoder_.Decode(encoded, &ids, &token_frames);
     if (!status.ok()) {
         VIETASR_LOG_WARN("vietasr") << "decode failed: " << status.message();
-        return std::string();
+        return out;
     }
     std::vector<std::string> tokens;
     tokens.reserve(ids.size());
     for (int id : ids) tokens.push_back(units_->At(id));
-    return post_processor_.Detokenize(tokens);
+    out.text = post_processor_.Detokenize(tokens);
+    double window_end = offset_s + static_cast<double>(pcm.size()) / kSampleRate;
+    out.words = WordGrouper::Group(tokens, token_frames, kEncoderFrameSeconds, offset_s, window_end, post_processor_);
+    return out;
 }
 
 VietAsrModule::VietAsrModule() = default;
@@ -169,18 +263,18 @@ double VietAsrModule::SamplesToSeconds(std::int64_t samples) const {
     return static_cast<double>(samples) / kSampleRate;
 }
 
-void VietAsrModule::CommitText(std::string text, double start_s, double end_s) {
-    if (text.empty()) return;
+void VietAsrModule::CommitText(Recognition recognition, double start_s, double end_s) {
+    if (recognition.text.empty()) return;
 #if VIETASR_HAS_ITN
-    if (config_.itn) text = itn::NormalizeText(text);
+    if (config_.itn) recognition.text = itn::NormalizeText(recognition.text);
 #endif
-    segments_.push_back(AsrSegment{std::move(text), start_s, end_s});
+    segments_.push_back(AsrSegment{std::move(recognition.text), start_s, end_s, std::move(recognition.words)});
 }
 
 void VietAsrModule::DecodeCompleted() {
     for (auto& utt : segmenter_->PopCompleted()) {
         auto t0 = std::chrono::steady_clock::now();
-        std::string text = recognizer_->Transcribe(utt.pcm);
+        Recognition text = recognizer_->Transcribe(utt.pcm, SamplesToSeconds(utt.start_sample));
         double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
         VIETASR_LOG_DEBUG("vietasr") << "utterance audio_s=" << SamplesToSeconds(static_cast<std::int64_t>(utt.pcm.size()))
             << " decode_ms=" << ms;
@@ -201,7 +295,7 @@ void VietAsrModule::UpdatePartial() {
     std::size_t interval = static_cast<std::size_t>(config_.partial_interval_ms) * kSampleRate / 1000;
     interval = std::max(interval, partial_decoded_samples_ / 4);
     if (active.size() < partial_decoded_samples_ + interval) return;
-    partial_ = recognizer_->Transcribe(active);
+    partial_ = recognizer_->Transcribe(active, SamplesToSeconds(segmenter_->active_start_sample())).text;
     partial_decoded_samples_ = active.size();
 }
 
@@ -232,7 +326,7 @@ void VietAsrModule::OnFinalize(ResultBuilder* out) {
     segmenter_->Finish();
     DecodeCompleted();
     if (segments_.empty() && fallback && SignalLevel::Rms(retained) >= kFallbackMinRms) {
-        CommitText(recognizer_->Transcribe(retained), 0.0,
+        CommitText(recognizer_->Transcribe(retained, 0.0), 0.0,
                    SamplesToSeconds(static_cast<std::int64_t>(retained.size())));
     }
     partial_.clear();
@@ -254,6 +348,17 @@ void VietAsrModule::EmitSegments(ResultBuilder* out) const {
         writer.Key("text").String(seg.text);
         writer.Key("start").Number(seg.start_s);
         writer.Key("end").Number(seg.end_s);
+        if (config_.emit_words) {
+            writer.Key("words").BeginArray();
+            for (const auto& w : seg.words) {
+                writer.BeginObject();
+                writer.Key("word").String(w.word);
+                writer.Key("start").Number(w.start_s);
+                writer.Key("end").Number(w.end_s);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
         writer.EndObject();
     }
     writer.EndArray();
