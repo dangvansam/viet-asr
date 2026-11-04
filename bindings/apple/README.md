@@ -116,7 +116,7 @@ xcodebuild test -scheme VietASR \
 ## Releasing
 
 Releases are fully automated by the `release` GitHub Actions workflow. On a
-push to the `sdk` branch (or a `v*` tag) its `build-apple` job:
+push to the `main` branch (or a `v*` tag) its `build-apple` job:
 
 1. builds `CVietASR.xcframework` and computes its checksum;
 2. uploads `CVietASR.xcframework.zip` as a GitHub Release asset;

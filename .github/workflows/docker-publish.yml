@@ -1,20 +1,20 @@
 # Build the VietASR server images and push to Docker Hub:
-#   - CPU / edge image — multi-arch amd64 + arm64, tags: latest, X.Y.Z, sdk ...
-#   - GPU image        — CUDA, amd64-only,        tags: gpu, gpu-X.Y.Z, gpu-sdk
+#   - CPU / edge image — multi-arch amd64 + arm64, tags: latest, X.Y.Z, main ...
+#   - GPU image        — CUDA, amd64-only,        tags: gpu, gpu-X.Y.Z, gpu-main
 #
 # Setup once — add two repository secrets (Settings → Secrets → Actions):
 #   DOCKERHUB_USERNAME  — your Docker Hub user
 #   DOCKERHUB_TOKEN     — a Docker Hub access token (not your password)
 #
 # Triggers:
-#   - push to the sdk branch           -> publishes the `sdk` / `gpu-sdk` tags
+#   - push to the main branch          -> publishes the `main` / `gpu-main` tags
 #   - push a tag like v0.1.0           -> publishes 0.1.0, 0.1, latest + gpu*
 #   - run manually (workflow_dispatch) -> publishes the tag you type, or a sha tag
 name: docker-publish
 
 on:
   push:
-    branches: ["sdk"]
+    branches: ["main"]
     tags: ["v*"]
   workflow_dispatch:
     inputs:

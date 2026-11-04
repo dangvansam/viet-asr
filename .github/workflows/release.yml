@@ -8,7 +8,7 @@
 #
 # Triggers:
 #   - push a tag like v0.2.0  -> publish a real release  (version = tag)
-#   - push to the sdk branch  -> publish a dev prerelease (version = X.Y.Z-dev.<run>)
+#   - push to the main branch -> publish a dev prerelease (version = X.Y.Z-dev.<run>)
 #   - run manually            -> build natives only (publish steps are skipped)
 #
 # The bindings ship small: each one downloads the matching native from this
@@ -18,7 +18,7 @@ name: release
 
 on:
   push:
-    branches: ["sdk"]
+    branches: ["main"]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
@@ -143,7 +143,7 @@ jobs:
           if [ "${{ github.ref_type }}" = "tag" ]; then
             v="${GITHUB_REF_NAME#v}"                       # v0.2.0 -> 0.2.0
           else
-            # sdk branch / manual run: X.Y.Z-dev.<run> prerelease.
+            # main branch / manual run: X.Y.Z-dev.<run> prerelease.
             base="$(python3 -c "import json;print(json.load(open('bindings/nodejs/package.json'))['version'].split('-')[0])")"
             v="${{ github.event.inputs.version }}"
             v="${v:-${base}-dev.${GITHUB_RUN_NUMBER}}"
@@ -167,7 +167,7 @@ jobs:
         # The Swift package's binary target points at this run's xcframework
         # asset. Commit it so the release tag (created below) carries a
         # Package.swift that `.package(url:)` consumers can resolve directly.
-        if: github.ref_name == 'sdk'
+        if: github.ref_name == 'main'
         run: |
           checksum="$(cat assets/CVietASR.xcframework.zip.sha256)"
           python3 scripts/stamp-apple-package.py "${{ steps.ver.outputs.version }}" "$checksum"
@@ -178,14 +178,14 @@ jobs:
           else
             git add bindings/apple/Package.swift
             git commit -m "release: stamp Apple Package.swift for v${{ steps.ver.outputs.version }}"
-            git push origin HEAD:sdk
+            git push origin HEAD:main
           fi
 
       - name: Create / update Release
-        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
+        if: github.ref_type == 'tag' || github.ref_name == 'main'
         uses: softprops/action-gh-release@v2
         with:
-          # On the sdk branch this creates the tag too, at the current branch
+          # On the main branch this creates the tag too, at the current branch
           # tip — i.e. the stamped Package.swift commit pushed just above.
           # Tags pushed by GITHUB_TOKEN do not re-trigger this workflow.
           tag_name: v${{ steps.ver.outputs.version }}
@@ -207,7 +207,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
       - run: python3 scripts/stamp-version.py "${{ needs.github-release.outputs.version }}"
       - name: Publish
-        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
+        if: github.ref_type == 'tag' || github.ref_name == 'main'
         working-directory: bindings/nodejs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -233,7 +233,7 @@ jobs:
         working-directory: bindings/webjs
         run: bash build-wasm.sh
       - name: Publish
-        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
+        if: github.ref_type == 'tag' || github.ref_name == 'main'
         working-directory: bindings/webjs
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -252,11 +252,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: python3 scripts/stamp-version.py "${{ needs.github-release.outputs.version }}"
       - name: Package (dry run)
-        if: github.ref_type != 'tag' && github.ref_name != 'sdk'
+        if: github.ref_type != 'tag' && github.ref_name != 'main'
         working-directory: bindings/rust
         run: cargo package --allow-dirty --no-verify
       - name: Publish
-        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
+        if: github.ref_type == 'tag' || github.ref_name == 'main'
         working-directory: bindings/rust
         run: cargo publish --allow-dirty --token "${{ secrets.CARGO_REGISTRY_TOKEN }}"
 
@@ -276,7 +276,7 @@ jobs:
         working-directory: bindings/java
         run: mvn -B -ntp package
       - name: Deploy
-        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
+        if: github.ref_type == 'tag' || github.ref_name == 'main'
         working-directory: bindings/java
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -305,7 +305,7 @@ jobs:
         working-directory: bindings/android
         run: gradle :lib:assembleRelease
       - name: Publish
-        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
+        if: github.ref_type == 'tag' || github.ref_name == 'main'
         working-directory: bindings/android
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -329,7 +329,7 @@ jobs:
           sum="$(shasum -a 256 VietASR.xcframework.zip | cut -d' ' -f1)"
           echo "VietASR.xcframework.zip SwiftPM checksum: $sum" >> "$GITHUB_STEP_SUMMARY"
       - name: Attach to release
-        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
+        if: github.ref_type == 'tag' || github.ref_name == 'main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.github-release.outputs.version }}
@@ -350,7 +350,7 @@ jobs:
         working-directory: bindings/csharp
         run: dotnet pack Vietasr/Vietasr.csproj -c Release -o nupkg
       - name: Push
-        if: github.ref_type == 'tag' || github.ref_name == 'sdk'
+        if: github.ref_type == 'tag' || github.ref_name == 'main'
         working-directory: bindings/csharp
         run: |
           dotnet nuget push "nupkg/*.nupkg" \

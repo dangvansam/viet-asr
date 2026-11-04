@@ -79,7 +79,7 @@ go get github.com/dangvansam/viet-asr/bindings/go
 ```
 
 Go 1.18+. `go get` resolves straight from git — the same command serves a tagged release
-or the latest branch (append `@sdk`). Pure Go (purego, no cgo); the native library is
+or the latest branch (append `@main`). Pure Go (purego, no cgo); the native library is
 downloaded on first use.
 </details>
 

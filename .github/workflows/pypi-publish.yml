@@ -5,7 +5,7 @@
 #
 # Triggers:
 #   - push a tag like v0.1.0   -> publish to PyPI  (version = tag)
-#   - push to the sdk branch   -> publish to PyPI  (version = X.Y.Z.dev<run> prerelease)
+#   - push to the main branch  -> publish to PyPI  (version = X.Y.Z.dev<run> prerelease)
 #   - run manually             -> build wheels only
 #
 # Wheels are built with cibuildwheel for CPython 3.8 - 3.13 on:
@@ -17,7 +17,7 @@ name: pypi-publish
 
 on:
   push:
-    branches: ["sdk"]
+    branches: ["main"]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -64,7 +64,7 @@ jobs:
 
           if ref.startswith("refs/tags/v"):
               new = ref[len("refs/tags/v"):]          # v0.2.0 -> 0.2.0
-          elif ref == "refs/heads/sdk":
+          elif ref == "refs/heads/main":
               new = f"{base}.dev{run}"                 # 0.1.0  -> 0.1.0.dev42
           else:
               new = None
@@ -123,7 +123,7 @@ jobs:
   publish-pypi:
     name: Publish to PyPI
     needs: wheels
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/sdk'
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Download wheels
