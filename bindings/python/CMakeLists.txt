@@ -5,7 +5,7 @@ set(VIETASR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(VIETASR_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(VIETASR_BUILD_SHARED ON CACHE BOOL "" FORCE)
 # The wheel installs libvietasr itself (below). Suppress core's own install
-# rules — otherwise they duplicate the 66 MB library into the wheel as
+# rules — otherwise they duplicate the ~87 MB library into the wheel as
 # vietasr/_native/lib/ plus an unused vietasr/_native/include/ tree.
 set(VIETASR_INSTALL OFF CACHE BOOL "" FORCE)
 
@@ -13,7 +13,7 @@ add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/../../core ${CMAKE_BINARY_DIR}/_vieta
 
 # With VIETASR_INSTALL=OFF, core leaves the target unversioned, so this ships a
 # single libvietasr.so — cffi loads it by plain name and a wheel zip would
-# otherwise materialise versioned SONAME symlinks as full 66 MB copies.
+# otherwise materialise versioned SONAME symlinks as full ~87 MB copies.
 # RPATH must point at the bundled onnxruntime sibling: $ORIGIN on Linux,
 # @loader_path on macOS (the dynamic loader does not understand $ORIGIN there).
 if(APPLE)

@@ -131,6 +131,6 @@ $JDK/bin/java -cp "libs/jna-5.14.0.jar:build/classes:build/examples" \
 
 ## Models
 
-The vietasr model is **bundled inside the SDK** — no download, no network. `model.onnx`
-is committed to the repo as <50 MB chunks and baked into the native `libvietasr`
+The vietasr model is **bundled inside the SDK** — no download, no network. The int8 Zipformer
+transducer (encoder + decoder + joiner, ~78 MB) is committed to the repo as <50 MB chunks and baked into the native `libvietasr`
 shipped in the JAR.

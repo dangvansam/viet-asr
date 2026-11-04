@@ -102,10 +102,14 @@ One JSON envelope. Each field is optional. Presence of a field means the corresp
 
 ## Model lifecycle
 
-The **vietasr** model is embedded directly into `libvietasr` at build time. It is
-committed to the repo as <50 MB chunks under `models/vietasr/` and baked into the
-binary by `core/cmake/EmbedModel.cmake` (see `core/src/embedded_model.cc`). No
-download, no cache, no network.
+The **vietasr** model — an int8 Zipformer2 transducer split into encoder, decoder and
+joiner ONNX files plus `tokens.txt` — is embedded directly into `libvietasr` at build
+time. It is committed to the repo as <50 MB chunks under `models/vietasr/` (described
+by `chunks.json`, manifest v2) and baked into the binary by
+`core/cmake/EmbedModel.cmake` (see `core/src/embedded_model.cc`). No download, no
+cache, no network. The encoder runs on the pipeline engine (and therefore on the
+selected execution provider); the small decoder and joiner run on dedicated CPU
+sessions.
 
 Other models (e.g. `vad`) are still fetched on demand: on first use a pipeline asks
 `ModelManager` to make sure each such module's files are present in the cache

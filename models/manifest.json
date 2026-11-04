@@ -1,14 +1,21 @@
 {
   "manifest_version": 1,
-  "updated": "2026-05-20",
+  "updated": "2026-11-04",
   "modules": {
     "vietasr": {
-      "default_version": "1",
+      "default_version": "2",
       "default_backend": "onnx",
-      "versions": ["1"],
+      "versions": [
+        "2"
+      ],
       "bundled": true,
       "files": {
-        "onnx": ["model.onnx", "vocab.txt"]
+        "onnx": [
+          "encoder.int8.onnx",
+          "decoder.int8.onnx",
+          "joiner.int8.onnx",
+          "tokens.txt"
+        ]
       },
       "backend_recommendations": {
         "android": "onnx",
@@ -18,12 +25,15 @@
         "windows": "onnx",
         "browser": "onnx",
         "default": "onnx"
-      }
+      },
+      "architecture": "zipformer2-transducer"
     },
     "vad": {
       "default_version": "1",
       "default_backend": "onnx",
-      "versions": ["1"]
+      "versions": [
+        "1"
+      ]
     }
   }
 }

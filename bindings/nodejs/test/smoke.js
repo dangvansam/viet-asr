@@ -33,7 +33,7 @@ function main() {
     const batchText = pipe2.transcribe(fixture).text;
     pipe2.close();
 
-    if (!batchText.startsWith("sao lại không liên quan")) {
+    if (!batchText.toLowerCase().startsWith("sao lại không liên quan")) {
         console.error(`FAIL: unexpected transcript prefix: ${batchText.slice(0, 80)}`);
         process.exit(3);
     }

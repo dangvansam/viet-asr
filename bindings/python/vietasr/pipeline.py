@@ -116,7 +116,12 @@ class Pipeline:
                 raise PipelineError(self.last_error() or "transcribe_file failed")
             return Result.from_json(self.ffi.string(raw).decode("utf-8"))
         import numpy as np
-        array = np.asarray(source).astype(np.int16)
+        array = np.asarray(source)
+        if array.ndim > 1:
+            array = array.mean(axis=1)
+        if np.issubdtype(array.dtype, np.floating):
+            array = np.clip(np.rint(array * 32768.0), -32768, 32767)
+        array = np.ascontiguousarray(array, dtype=np.int16)
         buffer = self.ffi.cast("const short*", self.ffi.from_buffer(array))
         raw = native.lib.vietasr_transcribe_buffer(self.handle, buffer, array.size, sample_rate)
         if raw == native.ffi.NULL:

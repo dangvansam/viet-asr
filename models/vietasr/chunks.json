@@ -1,18 +1,53 @@
 {
-  "model": "model.onnx",
-  "total_size": 69420285,
-  "sha256": "b34e699e5557f87741c6fca80246267268922c9d57045602da6fdf77039f0057",
+  "manifest_version": 2,
+  "model": "vietasr-zipformer-vi",
+  "architecture": "zipformer2-transducer",
   "chunk_size": 47185920,
-  "chunks": [
+  "files": [
     {
-      "name": "model.onnx.part00",
-      "size": 47185920,
-      "sha256": "5076517290a7540a3fdb0df465f1861cb73800ffefbf83fa6dc57bd22bcb7712"
+      "role": "encoder",
+      "name": "encoder.int8.onnx",
+      "total_size": 72828389,
+      "sha256": "571b7801b887b1ec65630ef3adcf6c3fed610ccdaf4b8c4f8af9d2bbe558331d",
+      "chunks": [
+        {
+          "name": "encoder.int8.onnx.part00",
+          "size": 47185920,
+          "sha256": "b3454658e06f52e1a65cb31e89019758070943c8a6f2b7a6e198ef875e420c75"
+        },
+        {
+          "name": "encoder.int8.onnx.part01",
+          "size": 25642469,
+          "sha256": "ae0d6b8e7cbfd86abf0ac0724a15c9cfb9f4c52890a202bc2cd84f2d1d642bff"
+        }
+      ]
     },
     {
-      "name": "model.onnx.part01",
-      "size": 22234365,
-      "sha256": "32642ff88e406318509ffe1b69421ee0dbc6ad1fb9ac4175dae9fd745af49b5a"
+      "role": "decoder",
+      "name": "decoder.int8.onnx",
+      "total_size": 4478997,
+      "sha256": "7158b5a057fc56a03df5a95ebc5307d5a58bd67c3180b80c4068056104a9d41c",
+      "chunks": [
+        {
+          "name": "decoder.int8.onnx.part00",
+          "size": 4478997,
+          "sha256": "7158b5a057fc56a03df5a95ebc5307d5a58bd67c3180b80c4068056104a9d41c"
+        }
+      ]
+    },
+    {
+      "role": "joiner",
+      "name": "joiner.int8.onnx",
+      "total_size": 4228494,
+      "sha256": "857ed7495ac0d7b109fe881a45ed56e0b54de279adc35c9364bfc721358f599a",
+      "chunks": [
+        {
+          "name": "joiner.int8.onnx.part00",
+          "size": 4228494,
+          "sha256": "857ed7495ac0d7b109fe881a45ed56e0b54de279adc35c9364bfc721358f599a"
+        }
+      ]
     }
-  ]
+  ],
+  "tokens": "tokens.txt"
 }

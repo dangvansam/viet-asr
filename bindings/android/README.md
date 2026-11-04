@@ -159,5 +159,6 @@ The demo expects a `sample.wav` (16 kHz mono 16-bit PCM) in `demo/src/main/asset
 ## Models
 
 The vietasr model is **bundled inside the SDK** — no download, no network, no asset
-copying. `model.onnx` is committed to the repo as <50 MB chunks and baked into the
+copying. The int8 Zipformer
+transducer (encoder + decoder + joiner, ~78 MB) is committed to the repo as <50 MB chunks and baked into the
 native `libvietasr` shipped in the AAR.

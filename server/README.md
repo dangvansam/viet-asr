@@ -85,10 +85,11 @@ pipeline is slower. With no selection, the server default (`--preset` /
 `--module`) runs.
 
 The **`stream`** preset is the recommended pipeline for streaming — ASR-only,
-no separate VAD model. The CTC endpointer segments on silence; the ASR emits
-`voiced_regions` + `speech` (from CTC-blank), a per-sentence `segments[]` array
-(`text` + `start`/`end`), and ITN-normalizes each sentence the moment it ends —
-all while the encoder cache keeps streaming. `text` is the running aggregate.
+no separate VAD module. The ASR module segments speech on pauses with its own
+embedded Silero VAD, emits `voiced_regions` + `speech`, and a per-sentence
+`segments[]` array (`text` + `start`/`end`). Text already carries casing,
+punctuation and written-form numbers (ITN is built into the model). `text` is the
+running aggregate.
 
 ## Batch — OpenAI-compatible
 

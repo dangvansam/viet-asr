@@ -218,7 +218,7 @@ set(VIETASR_CORE_SOURCES
 
     src/engines/engine_factory.cc
 
-    src/preprocess/feature_pipeline.cc
+    src/preprocess/kaldi_fbank.cc
     src/preprocess/audio_buffer.cc
     src/preprocess/audio_resampler.cc
     src/preprocess/audio_io.cc
@@ -266,11 +266,16 @@ endif()
 if(VIETASR_MODULE_VIETASR)
     list(APPEND VIETASR_CORE_SOURCES
         src/modules/vietasr/vietasr.cc
-        src/modules/vietasr/ctc_beam_search.cc
-        src/modules/vietasr/ctc_endpoint.cc
+        src/modules/vietasr/transducer_model.cc
+        src/modules/vietasr/transducer_search.cc
+        src/modules/vietasr/transducer_decoder.cc
+        src/modules/vietasr/utterance_segmenter.cc
         src/modules/vietasr/post_processor.cc
         src/modules/vietasr/units.cc
     )
+    if(NOT VIETASR_MODULE_VAD)
+        message(FATAL_ERROR "VIETASR_MODULE_VIETASR requires VIETASR_MODULE_VAD (utterance segmentation)")
+    endif()
 endif()
 
 if(VIETASR_MODULE_VAD)

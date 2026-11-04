@@ -129,7 +129,7 @@ jobs:
       - name: Package model
         run: |
           ( cd models/vietasr && tar -czf "$GITHUB_WORKSPACE/assets/viet-asr-model.tar.gz" \
-              chunks.json vocab.txt model.onnx.part* )
+              chunks.json tokens.txt *.part* )
           ls -la assets
 
       - name: Create / update Release

@@ -57,6 +57,15 @@ public:
 
     const char* backend_name() const override { return "onnx"; }
 
+    void SetIntraOpThreads(int threads) override {
+        if (threads < 1) threads = 1;
+        session_options_.SetIntraOpNumThreads(threads);
+        session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+        if (threads == 1) {
+            session_options_.AddConfigEntry("session.intra_op.allow_spinning", "0");
+        }
+    }
+
     const char* active_provider() const override { return active_provider_.c_str(); }
 
     Status LoadModel(const std::string& model_path) override {
@@ -177,8 +186,21 @@ public:
             for (auto d : shape) n_elements *= static_cast<std::size_t>(d);
             (*outputs)[i].shape = shape;
             (*outputs)[i].data.resize(n_elements);
-            const float* src = v.GetTensorData<float>();
-            std::copy(src, src + n_elements, (*outputs)[i].data.begin());
+            ONNXTensorElementDataType out_type = info.GetElementType();
+            if (out_type == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+                const std::int64_t* src = v.GetTensorData<std::int64_t>();
+                for (std::size_t k = 0; k < n_elements; ++k) {
+                    (*outputs)[i].data[k] = static_cast<float>(src[k]);
+                }
+            } else if (out_type == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32) {
+                const std::int32_t* src = v.GetTensorData<std::int32_t>();
+                for (std::size_t k = 0; k < n_elements; ++k) {
+                    (*outputs)[i].data[k] = static_cast<float>(src[k]);
+                }
+            } else {
+                const float* src = v.GetTensorData<float>();
+                std::copy(src, src + n_elements, (*outputs)[i].data.begin());
+            }
         }
         return Status::Ok();
     }

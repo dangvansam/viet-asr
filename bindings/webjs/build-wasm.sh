@@ -17,19 +17,20 @@ fi
 
 SOURCES=(
     "$HERE/src/wasm_api.cc"
-    "$CORE/src/preprocess/feature_pipeline.cc"
+    "$CORE/src/preprocess/kaldi_fbank.cc"
     "$CORE/src/preprocess/audio_resampler.cc"
-    "$CORE/src/modules/vietasr/ctc_beam_search.cc"
+    "$CORE/src/modules/vietasr/transducer_search.cc"
     "$CORE/src/modules/vietasr/post_processor.cc"
     "$CORE/src/modules/vietasr/units.cc"
 )
 
-EXPORTED_FUNCS='["_vietasr_wasm_init","_vietasr_wasm_vocab_size","_vietasr_wasm_reset","_vietasr_wasm_accept_pcm","_vietasr_wasm_frames_ready","_vietasr_wasm_pop_features","_vietasr_wasm_feature_dim","_vietasr_wasm_decode_logits","_vietasr_wasm_transcript","_malloc","_free"]'
+EXPORTED_FUNCS='["_vietasr_wasm_init","_vietasr_wasm_vocab_size","_vietasr_wasm_feature_dim","_vietasr_wasm_reset","_vietasr_wasm_accept_pcm","_vietasr_wasm_pcm_length","_vietasr_wasm_pcm_ptr","_vietasr_wasm_compute_features","_vietasr_wasm_features_ptr","_vietasr_wasm_search_begin","_vietasr_wasm_search_pending","_vietasr_wasm_search_pending_ptr","_vietasr_wasm_search_accept_decoder","_vietasr_wasm_search_joiner_inputs","_vietasr_wasm_joiner_encoder_ptr","_vietasr_wasm_joiner_decoder_ptr","_vietasr_wasm_search_accept_logits","_vietasr_wasm_search_text","_malloc","_free"]'
 
 emcc "${SOURCES[@]}" \
     -I"$CORE/include" \
     -I"$CORE/src" \
     -O3 \
+    -msimd128 \
     -std=c++17 \
     -s WASM=1 \
     -s MODULARIZE=1 \
@@ -43,7 +44,7 @@ emcc "${SOURCES[@]}" \
 echo "built: $OUT/vietasr-core.js + $OUT/vietasr-core.wasm"
 ls -lh "$OUT"/vietasr-core.*
 
-# The ~67 MB model is fetched at runtime (kept out of the npm package). Pin it
+# The ~78 MB int8 model is fetched at runtime (kept out of the npm package). Pin it
 # to this release on jsDelivr; src/index.js imports MODEL_BASE_URL from here.
 VERSION="$(node -p "require('$HERE/package.json').version")"
 cat > "$OUT/model-config.js" <<EOF

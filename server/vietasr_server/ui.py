@@ -138,11 +138,8 @@ async function loadPipelines() {
     mw.appendChild(lbl);
   });
 
-  // Default: Auto — batch runs ASR + ITN (whole-text ITN), streaming runs the
-  // stream preset (ITN per sentence). Pre-tick vietasr + itn so switching to
-  // Custom is ready to go.
   $("modeSel").value = "auto";
-  ["vietasr", "itn"].forEach((m) => {
+  ["vietasr"].forEach((m) => {
     const c = $("mod_" + m);
     if (c) c.checked = true;
   });
@@ -180,8 +177,8 @@ function pipelineSel(runMode) {
 function updateHint() {
   if ($("modeSel").value === "auto") {
     $("pipelineHint").textContent =
-      "auto · batch → batch preset (VAD + ASR + ITN + segments) · " +
-      "streaming → stream preset (ITN per sentence)";
+      "auto · batch → batch preset (VAD + ASR + segments) · " +
+      "streaming → stream preset (per-sentence segments)";
     return;
   }
   const sel = pipelineSel("batch");

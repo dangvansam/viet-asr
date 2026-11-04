@@ -1,39 +1,50 @@
 # Model Manifest
 
-The `vietasr` model ships **inside** the SDK — its ONNX file is committed to this
-repo as <50 MB chunks under `vietasr/` and reassembled at build time.
-Other models (e.g. `vad`) are still hosted separately and downloaded on demand;
-see [manifest.json](manifest.json).
+The `vietasr` model ships **inside** the SDK — committed to this repo as <50 MB chunks
+under `vietasr/` and embedded into `libvietasr` at build time. No download, no cache.
 
-## Modules
+## vietasr — Zipformer-vi transducer (bundled)
 
-### vietasr (bundled)
+| | |
+|---|---|
+| Architecture | Zipformer2 transducer (non-streaming encoder, stateless decoder, context 2) |
+| Parameters | 85.8M |
+| Precision | int8 (ONNX Runtime dynamic quantization) |
+| Vocabulary | 8192 BPE tokens — cased, digits, punctuation, byte fallback |
+| Output | Written-form Vietnamese: casing, punctuation and ITN built into the model |
+| Features | 80-dim Kaldi fbank, 16 kHz, 25 ms / 10 ms, no dither, `snip_edges=false` |
+| Decoding | modified beam search, 4 active paths |
 
-- `model.onnx` — streaming Conformer, CTC head fused, int8-quantized (66.2 MB)
-  - committed as chunks: `vietasr/model.onnx.part00`, `model.onnx.part01`
-  - reassembly + integrity is described by `vietasr/chunks.json`
-- `vocab.txt` — 4972 BPE tokens (64.6 KB)
+| File | Size | Chunks |
+|---|---|---|
+| `encoder.int8.onnx` | 69.5 MB | `encoder.int8.onnx.part00`, `.part01` |
+| `decoder.int8.onnx` | 4.3 MB | `decoder.int8.onnx.part00` |
+| `joiner.int8.onnx` | 4.0 MB | `joiner.int8.onnx.part00` |
+| `tokens.txt` | 104 KB | — |
 
-Native builds embed the model directly into `libvietasr` (see
-`core/cmake/EmbedModel.cmake`). The browser build (`@vietasr/web`) ships the
-chunks inside the npm package. No network fetch, no cache directory.
+`vietasr/chunks.json` (manifest v2) records every chunk's size and SHA-256; the CMake
+build verifies them before embedding (`core/cmake/EmbedModel.cmake`).
 
-To regenerate the chunks after producing a new `model.onnx`:
+Regenerate after exporting a new model:
 
 ```
-python scripts/split_model.py --model build/models/encoder.onnx \
-    --out-dir models/vietasr --name model.onnx
+python scripts/split_model.py --model-dir <dir with encoder/decoder/joiner(.int8).onnx + tokens.txt> \
+    --out-dir models/vietasr
+python scripts/join_model.py --chunk-dir models/vietasr --out-dir /tmp/vietasr-model
 ```
 
-### vad/1 (downloaded on demand)
+To run a different model without rebuilding, point the module at a folder:
+`pipeline.add("vietasr", {"model_dir": "/path"})` or set `VIETASR_ASR_MODEL_DIR`.
 
-- `silero_vad.onnx` — Silero VAD v5 (1.7 MB)
+## vad (bundled)
 
-License: MIT (upstream). See <https://github.com/snakers4/silero-vad>.
+- `silero_vad.onnx` — Silero VAD v5 (MIT), used by the `vad` module and by `vietasr`
+  for utterance segmentation.
+- `ten-vad.onnx` — TEN-VAD (Apache-2.0 with additional conditions), `vad` module only.
 
 ## Cache directory
 
-Downloaded models (currently only `vad`) land in:
+Models fetched on demand land in:
 
 - Linux: `~/.cache/vietasr/<module>/<version>/`
 - macOS: `~/Library/Caches/vietasr/<module>/<version>/`

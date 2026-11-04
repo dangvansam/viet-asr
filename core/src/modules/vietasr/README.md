@@ -1,28 +1,29 @@
-# vietasr — Vietnamese ASR Module
+# vietasr — Vietnamese ASR module
 
-Vietnamese ASR module: streaming Conformer encoder + CTC prefix beam search.
+Offline **Zipformer2 transducer** (85.8M params, int8) with **built-in ITN, punctuation
+and casing**: the model writes `"Ngân sách dưới 50 triệu."` directly — no separate
+ITN or punctuation pass.
+
+```
+pcm 16 kHz ─► Silero VAD segmenter ─► Kaldi fbank (80) ─► encoder ─► modified beam search ─► text
+              (pauses ≥ 1.2 s, ≤ 30 s)                     (ORT)     (decoder + joiner, 4 paths)
+```
 
 ## Output fields
 
 ```json
 {
-  "text":     "tôi có 20000₫. lúc 8:30",
-  "partial":  "lúc 8:30",
+  "text":     "Dạ, em chào anh. Hợp đồng của anh có giá trị 20 triệu.",
+  "partial":  "Dạ, em chào anh. Hợp đồng của anh",
   "is_final": true,
   "segments": [
-    {"text": "tôi có 20000₫", "start": 0.0,  "end": 1.84},
-    {"text": "lúc 8:30",       "start": 2.40, "end": 3.52}
+    {"text": "Dạ, em chào anh.", "start": 0.32, "end": 1.41},
+    {"text": "Hợp đồng của anh có giá trị 20 triệu.", "start": 2.88, "end": 5.06}
   ],
-  "voiced_regions": [{"start": 0.0, "end": 1.84}, {"start": 2.40, "end": 3.52}],
-  "speech": {"detected": true, "voiced_ratio": 0.86, ...}
+  "voiced_regions": [{"start": 0.32, "end": 1.41}, {"start": 2.88, "end": 5.06}],
+  "speech": {"detected": true, "voiced_ratio": 0.62}
 }
 ```
-
-- **`text`** — the running aggregate transcript of the whole stream, start to end.
-- **`segments`** — one entry per sentence ("chunk"): `text` (ITN-normalized when
-  `itn` is on) + `start` / `end` time. Emitted when `emit_segments` is on.
-- **`voiced_regions` / `speech`** — emitted when `emit_voiced_regions` is on
-  (see below).
 
 ## Configuration
 
@@ -30,81 +31,57 @@ Pass a JSON object to `pipeline.add("vietasr", {...})`:
 
 | Field | Type | Default | Effect |
 |---|---|---|---|
-| `pause_punctuation` | bool | `true` | Insert sentence/clause punctuation at speech pauses |
-| `sentence_pause_ms` | int | `1500` | Silence gap ≥ this between utterances → `.` |
-| `clause_pause_ms` | int | `500` | Silence gap ≥ this (and `< sentence_pause_ms`) → `,` |
-| `emit_segments` | bool | `false` | Emit the per-sentence `segments[]` array |
-| `emit_voiced_regions` | bool | `false` | Emit `voiced_regions` + `speech` (from CTC-blank) |
-| `itn` | bool | `false` | ITN-normalize each sentence as it ends |
+| `decoding_method` | string | `modified_beam_search` | `greedy_search` = 1 path |
+| `max_active_paths` | int | `4` | Beam width |
+| `num_threads` | int | `1` | Encoder intra-op threads |
+| `partial_interval_ms` | int | `640` | Min audio between partial re-decodes (grows to 25 % of the utterance) |
+| `emit_segments` | bool | `false` | Emit per-sentence `segments[]` |
+| `emit_voiced_regions` | bool | `false` | Emit `voiced_regions` + `speech` |
+| `vad_backend` | string | `silero` | `silero` / `tenvad` / `energy` |
+| `vad_threshold` | float | `0.5` | Speech probability cutoff |
+| `min_silence_ms` | int | `1200` | Pause that ends an utterance |
+| `speech_pad_ms` | int | `1000` | Audio kept around each utterance |
+| `max_utterance_ms` | int | `30000` | Longer speech is split at the quietest point of the last 3 s |
+| `model_dir` | string | — | Load `encoder/decoder/joiner(.int8).onnx` + `tokens.txt` from a folder instead of the embedded model |
+| `itn` | bool | `false` | Extra rule-based ITN pass (rarely needed — the model already does ITN) |
 
-The **`stream`** preset turns all three on — see below.
+Model lookup order: `model_dir` → `$VIETASR_ASR_MODEL_DIR` → embedded → `<cache>/vietasr/`.
 
-**Streaming sentences + per-sentence ITN.** The CTC endpoint detector commits a
-sentence at every pause. With `emit_segments`, each committed sentence is added
-to `segments[]` with its start/end time; with `itn`, that sentence is
-inverse-text-normalized *the moment it ends* (`"hai mươi nghìn đồng"` →
-`"20000₫"`). ITN touches only the committed text — the encoder/beam caches are
-untouched, so the rest of the stream continues uninterrupted. `text` is the
-running aggregate of all sentences. (`itn` is ignored if the `itn` module was
-not built into the library.)
+## Streaming
 
-**Pause-driven punctuation.** The CTC endpoint detector already splits speech
-into utterances at every pause. Each utterance records how long the silence
-before it lasted; when the transcript is assembled, a long pause becomes `. `
-and a shorter one `, ` (anything below `clause_pause_ms`, just a space):
-
-```
-"em đi học"  +  2.0 s pause  +  "anh ở nhà"   ->  "em đi học. anh ở nhà"
-"hôm nay"    +  1.1 s pause  +  "trời đẹp"     ->  "hôm nay, trời đẹp"
-```
-
-Set `pause_punctuation: false` to disable it — utterances are then
-newline-joined (legacy behavior). Note the endpoint detector only cuts on
-silences ≳ 1 s, so this marks sentence and long-clause boundaries, not every
-brief breath. It runs entirely inside the ASR step, so the punctuated text
-flows straight into downstream modules such as `itn`.
-
-## Pipeline contribution
-
-| Hook | Action |
-|---|---|
-| `Init` | Loads the embedded `model.onnx` + `vocab.txt` from buffers baked into libvietasr. Builds CTC beam search + endpoint detector. |
-| `OnFeature` | Buffers 43 input frames (≈430 ms), runs encoder, emits logits via `OnLogits` for downstream modules. |
-| `OnLogits` | CTC prefix beam search (beam=10). Updates partial transcript. |
-| `OnSegment` | Endpoint reached (rule1=5s / rule2=1s / rule3=20s). Emits final segment. |
-| `OnText` | (consumes from downstream) |
-| `OnFinalize` | Flushes remaining features, returns final transcript. |
+The model is non-causal, so streaming is **VAD-segmented**: each utterance is decoded
+offline when its pause arrives, and while the speaker is still talking the current
+utterance is re-decoded for the `partial`. The final transcript of a stream is
+byte-identical to a batch run over the same audio.
 
 ## Files
 
-- `vietasr.{h,cc}` — main `Module` impl
-- `ctc_beam_search.{h,cc}` — port of WeNet's `ctc_prefix_beam_search.cc`
-- `ctc_endpoint.{h,cc}` — port of WeNet's `ctc_endpoint.cc` (rule1/2/3)
-- `post_processor.{h,cc}` — BPE detokenizer (`▁` → space, strip `<unk>`)
-- `units.{h,cc}` — vocab loader for `vocab.txt`
-- `vietasr_test.cc` — golden fixture tests against Python oracle
+- `vietasr.{h,cc}` — `Module` implementation, config, segment joining
+- `transducer_model.{h,cc}` — encoder/decoder/joiner sessions + model asset resolution
+- `transducer_search.{h,cc}` — modified beam search as a step machine (shared with the WASM binding)
+- `transducer_decoder.{h,cc}` — drives the search with the native ONNX sessions
+- `utterance_segmenter.{h,cc}` — VAD-driven utterance cutting, long-utterance splitting
+- `post_processor.{h,cc}` — BPE detokenizer (`▁` → space, byte-fallback `<0xNN>`)
+- `units.{h,cc}` — `tokens.txt` loader
 
-## Model
+## Model files
 
-The model ships **inside the SDK** — no download, no cache. It is committed to
-the repo as <50 MB chunks under `models/vietasr/` and baked into `libvietasr`
-at build time (see `core/cmake/EmbedModel.cmake`).
+Committed as <50 MB chunks under `models/vietasr/` and embedded into `libvietasr`:
 
-| File | Size | Format |
+| File | Size |
+|---|---|
+| `encoder.int8.onnx` | 69.5 MB |
+| `decoder.int8.onnx` | 4.3 MB |
+| `joiner.int8.onnx` | 4.0 MB |
+| `tokens.txt` | 8192 BPE tokens (cased, digits, punctuation, byte fallback) |
+
+Regenerate: `python scripts/split_model.py --model-dir <dir with *.onnx + tokens.txt> --out-dir models/vietasr`
+
+## Measured speed
+
+AMD EPYC 9334, 1 thread, int8, via the Python binding:
+
+| Mode | RTF | Speed |
 |---|---|---|
-| `model.onnx` | 66.2 MB | ONNX, streaming Conformer + CTC head fused, int8-quantized |
-| `vocab.txt` | 64.6 KB | 4972 BPE tokens, one per line |
-
-Regenerate the chunks after producing a new model:
-`python scripts/split_model.py --model <model.onnx> --out-dir models/vietasr --name model.onnx`
-
-## Latency
-
-| Platform | Hardware | RTF |
-|---|---|---|
-| Linux x86_64 | Xeon 8 core | 0.08 |
-| Android | Pixel 7 | 0.18 |
-| iOS | iPhone 14 | 0.12 |
-| Browser (WASM, ONNX) | Chrome M1 | 0.35 |
-
-(RTF = real-time factor; lower is faster. RTF 0.1 = transcribes 10s of audio in 1s.)
+| Batch | 0.035 | 28× real-time |
+| Streaming (with partials) | 0.15 | 6.7× real-time |

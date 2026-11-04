@@ -102,6 +102,6 @@ dotnet pack Vietasr/Vietasr.csproj -c Release
 
 ## Models
 
-The vietasr model is **bundled inside the SDK** — no download, no network. `model.onnx`
-is committed to the repo as <50 MB chunks and baked into the native `libvietasr`
+The vietasr model is **bundled inside the SDK** — no download, no network. The int8 Zipformer
+transducer (encoder + decoder + joiner, ~78 MB) is committed to the repo as <50 MB chunks and baked into the native `libvietasr`
 shipped in the NuGet package.

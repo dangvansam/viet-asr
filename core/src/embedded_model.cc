@@ -13,8 +13,7 @@ namespace {
 HMODULE SelfModule() {
     HMODULE module = nullptr;
     GetModuleHandleExW(
-        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
-            | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
         reinterpret_cast<LPCWSTR>(&SelfModule),
         &module);
     return module;
@@ -22,82 +21,103 @@ HMODULE SelfModule() {
 
 vietasr::EmbeddedBlob LoadOneResource(HMODULE module, int id) {
     if (!module) return {nullptr, 0};
-    // RT_RCDATA expands to the ANSI MAKEINTRESOURCE form (LPSTR); FindResourceW
-    // needs an LPCWSTR. The value is an integer-in-pointer, so reinterpret it.
-    HRSRC info = FindResourceW(module, MAKEINTRESOURCEW(id),
-                               reinterpret_cast<LPCWSTR>(RT_RCDATA));
+    HRSRC info = FindResourceW(module, MAKEINTRESOURCEW(id), reinterpret_cast<LPCWSTR>(RT_RCDATA));
     if (!info) return {nullptr, 0};
     HGLOBAL handle = LoadResource(module, info);
     if (!handle) return {nullptr, 0};
     const void* data = LockResource(handle);
     DWORD size = SizeofResource(module, info);
     if (!data || size == 0) return {nullptr, 0};
-    return {static_cast<const unsigned char*>(data),
-            static_cast<std::size_t>(size)};
+    return {static_cast<const unsigned char*>(data), static_cast<std::size_t>(size)};
 }
 
-// Model chunks are stored as resources 100, 101, ... — concatenate them once.
-const std::vector<unsigned char>& ModelBytes() {
-    static const std::vector<unsigned char> bytes = [] {
-        std::vector<unsigned char> out;
+class ResourceAssembler final {
+public:
+    explicit ResourceAssembler(int base) {
         HMODULE module = SelfModule();
-        for (int id = 100;; ++id) {
+        for (int id = base; id < base + 100; ++id) {
             vietasr::EmbeddedBlob chunk = LoadOneResource(module, id);
             if (chunk.empty()) break;
-            out.insert(out.end(), chunk.data, chunk.data + chunk.size);
+            bytes.insert(bytes.end(), chunk.data, chunk.data + chunk.size);
         }
-        return out;
-    }();
-    return bytes;
-}
+    }
+
+    vietasr::EmbeddedBlob Blob() const {
+        if (bytes.empty()) return {nullptr, 0};
+        return {bytes.data(), bytes.size()};
+    }
+
+    std::vector<unsigned char> bytes;
+};
 
 }
 
 namespace vietasr {
 
-EmbeddedBlob EmbeddedAsrModel() {
-    const std::vector<unsigned char>& bytes = ModelBytes();
-    if (bytes.empty()) return {nullptr, 0};
-    return {bytes.data(), bytes.size()};
+EmbeddedBlob EmbeddedAsrEncoder() {
+    static const ResourceAssembler assembled(100);
+    return assembled.Blob();
 }
 
-EmbeddedBlob EmbeddedAsrVocab() {
+EmbeddedBlob EmbeddedAsrDecoder() {
+    static const ResourceAssembler assembled(200);
+    return assembled.Blob();
+}
+
+EmbeddedBlob EmbeddedAsrJoiner() {
+    static const ResourceAssembler assembled(300);
+    return assembled.Blob();
+}
+
+EmbeddedBlob EmbeddedAsrTokens() {
     return LoadOneResource(SelfModule(), 2);
 }
 
 }
 
-#else  // non-MSVC: symbols come from the .incbin assembly file
+#else
 
 extern "C" {
-extern const unsigned char vietasr_asr_model_onnx[];
-extern const unsigned char vietasr_asr_vocab[];
-extern const unsigned long long vietasr_asr_model_onnx_size;
-extern const unsigned long long vietasr_asr_vocab_size;
+extern const unsigned char vietasr_asr_encoder[];
+extern const unsigned char vietasr_asr_decoder[];
+extern const unsigned char vietasr_asr_joiner[];
+extern const unsigned char vietasr_asr_tokens[];
+extern const unsigned long long vietasr_asr_encoder_size;
+extern const unsigned long long vietasr_asr_decoder_size;
+extern const unsigned long long vietasr_asr_joiner_size;
+extern const unsigned long long vietasr_asr_tokens_size;
 }
 
 namespace vietasr {
 
-EmbeddedBlob EmbeddedAsrModel() {
-    return {vietasr_asr_model_onnx,
-            static_cast<std::size_t>(vietasr_asr_model_onnx_size)};
+EmbeddedBlob EmbeddedAsrEncoder() {
+    return {vietasr_asr_encoder, static_cast<std::size_t>(vietasr_asr_encoder_size)};
 }
 
-EmbeddedBlob EmbeddedAsrVocab() {
-    return {vietasr_asr_vocab,
-            static_cast<std::size_t>(vietasr_asr_vocab_size)};
+EmbeddedBlob EmbeddedAsrDecoder() {
+    return {vietasr_asr_decoder, static_cast<std::size_t>(vietasr_asr_decoder_size)};
+}
+
+EmbeddedBlob EmbeddedAsrJoiner() {
+    return {vietasr_asr_joiner, static_cast<std::size_t>(vietasr_asr_joiner_size)};
+}
+
+EmbeddedBlob EmbeddedAsrTokens() {
+    return {vietasr_asr_tokens, static_cast<std::size_t>(vietasr_asr_tokens_size)};
 }
 
 }
 
-#endif  // _MSC_VER
+#endif
 
-#else  // VIETASR_HAS_EMBEDDED_MODEL not set — model was not embedded
+#else
 
 namespace vietasr {
 
-EmbeddedBlob EmbeddedAsrModel() { return {nullptr, 0}; }
-EmbeddedBlob EmbeddedAsrVocab() { return {nullptr, 0}; }
+EmbeddedBlob EmbeddedAsrEncoder() { return {nullptr, 0}; }
+EmbeddedBlob EmbeddedAsrDecoder() { return {nullptr, 0}; }
+EmbeddedBlob EmbeddedAsrJoiner() { return {nullptr, 0}; }
+EmbeddedBlob EmbeddedAsrTokens() { return {nullptr, 0}; }
 
 }
 

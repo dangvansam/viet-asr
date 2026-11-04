@@ -26,6 +26,8 @@ public:
     // (e.g. "CPUExecutionProvider"). Reflects the EP fallback outcome.
     virtual const char* active_provider() const { return "CPUExecutionProvider"; }
 
+    virtual void SetIntraOpThreads(int threads) { (void)threads; }
+
     virtual Status LoadModel(const std::string& model_path) = 0;
 
     virtual Status LoadModelFromBuffer(const void* data, std::size_t size) {
