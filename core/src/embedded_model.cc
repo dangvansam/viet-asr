@@ -55,17 +55,17 @@ public:
 namespace vietasr {
 
 EmbeddedBlob EmbeddedAsrEncoder() {
-    static const ResourceAssembler assembled(100);
+    static const ResourceAssembler assembled(1000);
     return assembled.Blob();
 }
 
 EmbeddedBlob EmbeddedAsrDecoder() {
-    static const ResourceAssembler assembled(200);
+    static const ResourceAssembler assembled(1100);
     return assembled.Blob();
 }
 
 EmbeddedBlob EmbeddedAsrJoiner() {
-    static const ResourceAssembler assembled(300);
+    static const ResourceAssembler assembled(1200);
     return assembled.Blob();
 }
 
