@@ -439,6 +439,9 @@ target_include_directories(vietasr_objects
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+if(WIN32)
+    target_compile_definitions(vietasr_objects PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
 target_compile_options(vietasr_objects PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
     $<$<CXX_COMPILER_ID:MSVC>:/W4>

@@ -113,6 +113,19 @@ TEST(UtteranceSegmenter, LongSpeechIsSplitBelowMaxLength) {
     EXPECT_GE(total, tone.size() - 16000u);
 }
 
+TEST(VietAsrBatch, SilenceAndLowNoiseGiveEmptyTranscript) {
+    VietasrPipeline* pipeline = vietasr_pipeline_preset("transcribe");
+    ASSERT_NE(pipeline, nullptr);
+    std::vector<short> silence(16000, 0);
+    std::string zeros = vietasr_transcribe_buffer(pipeline, silence.data(), static_cast<int>(silence.size()), 16000.0f);
+    EXPECT_NE(zeros.find("\"text\":\"\""), std::string::npos) << zeros;
+    std::vector<short> hiss(16000);
+    for (std::size_t i = 0; i < hiss.size(); ++i) hiss[i] = static_cast<short>((i * 7919) % 41) - 20;
+    std::string noise = vietasr_transcribe_buffer(pipeline, hiss.data(), static_cast<int>(hiss.size()), 16000.0f);
+    EXPECT_NE(noise.find("\"text\":\"\""), std::string::npos) << noise;
+    vietasr_pipeline_free(pipeline);
+}
+
 TEST(VietAsrStreaming, LongSilentStreamCompletes) {
     if (std::getenv("VIETASR_SLOW_TESTS") == nullptr) {
         GTEST_SKIP() << "set VIETASR_SLOW_TESTS=1 to run";

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <utility>
 
 #include "utils/json.h"
@@ -19,6 +20,7 @@ namespace {
 constexpr int kSampleRate = 16000;
 constexpr std::size_t kMinDecodeSamples = 1600;
 constexpr std::size_t kStreamingFrameLimit = 2 * kSampleRate;
+constexpr double kFallbackMinRms = 0.003;
 
 int ReadInt(const std::string& json, const char* key, int fallback) {
     double value = 0.0;
@@ -30,6 +32,13 @@ bool ReadBool(const std::string& json, const char* key, bool fallback) {
     return JsonGetBool(json, key, &value) ? value : fallback;
 }
 
+}
+
+double SignalLevel::Rms(const std::vector<float>& pcm) {
+    if (pcm.empty()) return 0.0;
+    double sum = 0.0;
+    for (float v : pcm) sum += static_cast<double>(v) * v;
+    return std::sqrt(sum / static_cast<double>(pcm.size()));
 }
 
 VietAsrConfig VietAsrConfig::Parse(const std::string& json) {
@@ -222,7 +231,7 @@ void VietAsrModule::OnFinalize(ResultBuilder* out) {
     if (fallback) retained = segmenter_->retained_stream();
     segmenter_->Finish();
     DecodeCompleted();
-    if (segments_.empty() && fallback) {
+    if (segments_.empty() && fallback && SignalLevel::Rms(retained) >= kFallbackMinRms) {
         CommitText(recognizer_->Transcribe(retained), 0.0,
                    SamplesToSeconds(static_cast<std::int64_t>(retained.size())));
     }

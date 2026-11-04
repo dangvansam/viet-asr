@@ -35,6 +35,11 @@ struct VietAsrConfig final {
     static VietAsrConfig Parse(const std::string& json);
 };
 
+class SignalLevel final {
+public:
+    static double Rms(const std::vector<float>& pcm);
+};
+
 class SegmentJoiner final {
 public:
     static std::string Join(const std::vector<AsrSegment>& segments, const std::string& partial);
