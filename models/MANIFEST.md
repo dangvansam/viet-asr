@@ -22,6 +22,9 @@ under `vietasr/` and embedded into `libvietasr` at build time. No download, no c
 | `joiner.int8.onnx` | 4.0 MB | `joiner.int8.onnx.part00` |
 | `tokens.txt` | 104 KB | — |
 
+License: Apache-2.0. Hugging Face: [dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr)
+(mirror [coflar-ai/viet-asr](https://huggingface.co/coflar-ai/viet-asr)) — int8 ONNX.
+
 `vietasr/chunks.json` (manifest v2) records every chunk's size and SHA-256; the CMake
 build verifies them before embedding (`core/cmake/EmbedModel.cmake`).
 

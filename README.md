@@ -485,7 +485,9 @@ decoder 4.3 MB, joiner 4.0 MB) plus `tokens.txt`.
 
 It ships **inside the SDK**: committed to this repo as <50 MB chunks under
 [models/vietasr/](models/vietasr/) and baked into the native library at build time.
-Details: [models/MANIFEST.md](models/MANIFEST.md).
+Details: [models/MANIFEST.md](models/MANIFEST.md). Standalone int8 ONNX files (usable
+with sherpa-onnx) are on Hugging Face: [dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr)
+(mirror: [coflar-ai/viet-asr](https://huggingface.co/coflar-ai/viet-asr)). License: Apache-2.0.
 
 ## 🙏 Credits
 
@@ -497,7 +499,7 @@ Details: [models/MANIFEST.md](models/MANIFEST.md).
 
 ## 📄 License
 
-Apache 2.0 for the SDK code. The model has separate terms — see [models/MANIFEST.md](models/MANIFEST.md).
+Apache 2.0 for the SDK code and the bundled VietASR Zipformer-vi model.
 
 Bundled third-party components keep their own licenses — see
 [Third-party notices](#third-party-notices) below. Note that the optional
