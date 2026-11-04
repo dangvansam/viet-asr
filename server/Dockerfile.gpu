@@ -40,7 +40,7 @@ RUN python3.12 -m build --wheel --outdir /wheels bindings/python
 
 # Static ffmpeg (CUDA images are x86_64-only, so amd64 is the single target).
 RUN set -eux; \
-    curl -fsSL "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" \
+    curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" \
         -o /tmp/ff.tar.xz; \
     mkdir -p /tmp/ff; tar -xf /tmp/ff.tar.xz -C /tmp/ff --strip-components=1; \
     install -m 0755 /tmp/ff/ffmpeg /usr/local/bin/ffmpeg; \

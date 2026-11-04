@@ -29,7 +29,7 @@ RUN set -eux; \
         arm)   FF=armhf ;; \
         *)     FF=amd64 ;; \
     esac; \
-    curl -fsSL "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${FF}-static.tar.xz" \
+    curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-${FF}-static.tar.xz" \
         -o /tmp/ff.tar.xz; \
     mkdir -p /tmp/ff; tar -xf /tmp/ff.tar.xz -C /tmp/ff --strip-components=1; \
     install -m 0755 /tmp/ff/ffmpeg /usr/local/bin/ffmpeg; \
