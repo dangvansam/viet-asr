@@ -24,9 +24,9 @@ let cvietasr: Target = hasLocalXCFramework
     : .binaryTarget(
         name: "CVietASR",
         // stamp:url — replaced at release time
-        url: "https://github.com/dangvansam/viet-asr/releases/download/v0.1.0-dev.8/CVietASR.xcframework.zip",
+        url: "https://github.com/dangvansam/viet-asr/releases/download/v0.1.0-dev.12/CVietASR.xcframework.zip",
         // stamp:checksum — replaced at release time
-        checksum: "81951ba980396b3b1daf41970538a0995d4b63e2e6f06ba02bbbcfa3f8f0709f"
+        checksum: "684b2de67a76d73b912b116b017a96b88256f4b58a2f7c8463c043791f53ca48"
     )
 
 let package = Package(
