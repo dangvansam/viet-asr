@@ -4,6 +4,7 @@
 // Licensed under the Apache License, Version 2.0, with certain conditions.
 // Refer to the "LICENSE" file in the root directory for more information.
 //
+#include <string>
 #include <string.h>
 #include <stdlib.h>
 #include <algorithm>
@@ -135,8 +136,17 @@ AUP_MODULE_AIVAD::AUP_MODULE_AIVAD(char* onnx_path) {
   OrtSessionOptions* session_options;
   ort_api->CreateSessionOptions(&session_options);
   ort_api->SetIntraOpNumThreads(session_options, 1);
+#if defined(_WIN32)
+  std::wstring wide_path;
+  for (const char* c = onnx_path; c && *c; ++c) {
+    wide_path.push_back(static_cast<wchar_t>(static_cast<unsigned char>(*c)));
+  }
+  status = ort_api->CreateSession(ort_env, wide_path.c_str(), session_options,
+                                  &ort_session);
+#else
   status =
       ort_api->CreateSession(ort_env, onnx_path, session_options, &ort_session);
+#endif
   ort_api->ReleaseSessionOptions(session_options);
   if (status) {
     printf("Failed to create ort_session: %s\n",

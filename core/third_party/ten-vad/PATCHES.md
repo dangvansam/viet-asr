@@ -47,6 +47,9 @@ library instead, so two source files are patched. Every change is marked with a
   `core/src/modules/vad/embedded_vad.cc`). The `#else` branch keeps the
   original file-path behavior unchanged.
 
+- On Windows the file-path constructor widens the path to `wchar_t` before
+  `CreateSession` (ONNX Runtime's `ORTCHAR_T` is `wchar_t` there).
+
 ## License note
 
 TEN-VAD is licensed under **Apache-2.0 with additional conditions** — notably a
