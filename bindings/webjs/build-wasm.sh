@@ -9,8 +9,8 @@ CORE="$HERE/../../core"
 OUT="$HERE/dist"
 mkdir -p "$OUT"
 
-if ! command -v emcc >/dev/null 2>&1; then
-    echo "emcc not found. Activate emsdk first:"
+if ! command -v em++ >/dev/null 2>&1; then
+    echo "em++ not found. Activate emsdk first:"
     echo "  source /path/to/emsdk/emsdk_env.sh"
     exit 1
 fi
@@ -26,7 +26,7 @@ SOURCES=(
 
 EXPORTED_FUNCS='["_vietasr_wasm_init","_vietasr_wasm_vocab_size","_vietasr_wasm_feature_dim","_vietasr_wasm_reset","_vietasr_wasm_accept_pcm","_vietasr_wasm_pcm_length","_vietasr_wasm_pcm_ptr","_vietasr_wasm_compute_features","_vietasr_wasm_features_ptr","_vietasr_wasm_search_begin","_vietasr_wasm_search_pending","_vietasr_wasm_search_pending_ptr","_vietasr_wasm_search_accept_decoder","_vietasr_wasm_search_joiner_inputs","_vietasr_wasm_joiner_encoder_ptr","_vietasr_wasm_joiner_decoder_ptr","_vietasr_wasm_search_accept_logits","_vietasr_wasm_search_text","_malloc","_free"]'
 
-emcc "${SOURCES[@]}" \
+em++ "${SOURCES[@]}" \
     -I"$CORE/include" \
     -I"$CORE/src" \
     -O3 \

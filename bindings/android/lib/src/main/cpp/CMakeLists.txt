@@ -58,7 +58,6 @@ set(VIETASR_CORE_SOURCES
     "${VIETASR_CORE_DIR}/src/modules/vad/vad_segmenter.cc"
     "${VIETASR_CORE_DIR}/src/modules/vad/energy_backend.cc"
     "${VIETASR_CORE_DIR}/src/modules/punctuation/punctuation.cc"
-    "${VIETASR_CORE_DIR}/src/modules/itn/itn.cc"
     "${VIETASR_CORE_DIR}/src/modules/diarization/diarization.cc"
     "${VIETASR_CORE_DIR}/src/modules/gender/gender.cc"
     "${VIETASR_CORE_DIR}/src/modules/emotion/emotion.cc"
