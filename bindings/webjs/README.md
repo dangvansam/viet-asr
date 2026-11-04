@@ -1,4 +1,4 @@
-# @vietasr/web — WebAssembly / browser binding
+# @viet-asr/web — WebAssembly / browser binding
 
 Offline Vietnamese Speech AI SDK for the browser. Runs **fully on-device** — no server, no upload.
 
@@ -51,7 +51,23 @@ const text = await pipe.transcribe(pcm, audioBuffer.sampleRate);
 console.log(text);
 ```
 
-See [examples/index.html](examples/index.html) for a complete file-picker demo.
+### Streaming (live microphone)
+
+For real-time transcription, feed audio chunks as they arrive — the transcript
+grows with each call:
+
+```js
+const pipe = await Pipeline.create();
+pipe.startStream();
+// ... for each chunk of captured PCM:
+const partial = await pipe.pushStream(pcm, sampleRate);  // transcript so far
+// ... when the user stops:
+const final = await pipe.finishStream();
+```
+
+[examples/index.html](examples/index.html) is a complete demo with a **live
+microphone** mode (text appears as you speak) and a WAV file picker, both driven
+by a Web Worker so the encoder never blocks the UI.
 
 ## Build from source
 
@@ -61,21 +77,25 @@ Requires the [Emscripten SDK](https://emscripten.org/docs/getting_started/downlo
 # activate emscripten
 source /path/to/emsdk/emsdk_env.sh
 
-# compile the DSP core to WASM + bundle the model chunks
+# compile the DSP core (fbank + beam search) to WASM
 cd bindings/webjs
-./build-wasm.sh
+bash build-wasm.sh
 # -> dist/vietasr-core.js + dist/vietasr-core.wasm + dist/model-config.js
 
-# install the JS dependency
+# install the JS dependency (onnxruntime-web)
 npm install
 ```
 
-Serve `examples/index.html` over HTTP (WASM + `fetch` need a real origin):
+The demo loads the model from the repo's `models/vietasr/`, so serve the
+**repository root** over HTTP (WASM, workers and `fetch` all need a real origin):
 
 ```bash
+# from the repo root
 npx serve .
-# open http://localhost:3000/examples/
+# open http://localhost:3000/bindings/webjs/examples/
 ```
+
+The microphone needs a secure context — `localhost` qualifies.
 
 ## API
 
@@ -83,6 +103,9 @@ npx serve .
 |---|---|---|
 | `Pipeline.create` | `(options?) => Promise<Pipeline>` | fetches + verifies the chunked model, inits WASM + 3 ORT sessions |
 | `pipeline.transcribe` | `(pcm: Float32Array, sampleRate?) => Promise<string>` | full clip; audio > 30 s is split at the quietest point |
+| `pipeline.startStream` | `() => void` | begin a streaming session |
+| `pipeline.pushStream` | `(pcm: Float32Array, sampleRate?) => Promise<string>` | feed a chunk; returns committed sentences + current partial |
+| `pipeline.finishStream` | `() => Promise<string>` | decode the tail; returns the final transcript |
 
 `options`:
 
@@ -92,6 +115,13 @@ npx serve .
 | `model` | — | preloaded `{encoder, decoder, joiner, tokens}` (skips fetching) |
 | `maxActivePaths` | `4` | beam width; `1` = greedy |
 | `executionProviders` | `["wasm"]` | encoder EPs, e.g. `["webgpu", "wasm"]` |
+| `ortModuleUrl` | — | explicit URL of the onnxruntime-web ESM module (needed inside a Web Worker) |
+| `ortWasmPaths` | — | directory holding onnxruntime-web's own `.wasm` files |
+
+Streaming commits a sentence after a 1.2 s pause (or at 30 s) and re-decodes the
+sentence in progress for the partial, at most every 640 ms (growing with its length).
+See [examples/asr-worker.js](examples/asr-worker.js) for a live-microphone demo in a
+Web Worker.
 
 ## Notes
 

@@ -1,4 +1,3 @@
-import * as ort from "onnxruntime-web";
 import createVietasrModule from "../dist/vietasr-core.js";
 import { MODEL_BASE_URL } from "../dist/model-config.js";
 
@@ -6,6 +5,24 @@ const SAMPLE_RATE = 16000;
 const MAX_WINDOW_SECONDS = 30;
 const SPLIT_SEARCH_SECONDS = 3;
 const ENERGY_HOP = 512;
+const PAUSE_SECONDS = 1.2;
+const PAUSE_RMS = 0.01;
+const PARTIAL_SECONDS = 0.64;
+
+let ort = null;
+
+class OrtLoader {
+    static async load(options) {
+        if (!ort) {
+            const mod = options.ortModuleUrl
+                ? await import(options.ortModuleUrl)
+                : await import("onnxruntime-web");
+            ort = mod.InferenceSession ? mod : (mod.default ?? mod);
+        }
+        if (options.ortWasmPaths) ort.env.wasm.wasmPaths = options.ortWasmPaths;
+        return ort;
+    }
+}
 
 class AssetFetcher {
     constructor(baseUrl) {
@@ -83,6 +100,29 @@ class SegmentPlanner {
     }
 }
 
+class StreamState {
+    constructor() {
+        this.committed = [];
+        this.commitOffset = 0;
+        this.partial = "";
+        this.partialDecodedLength = 0;
+    }
+
+    text() {
+        return [...this.committed, this.partial].filter((t) => t).join(" ");
+    }
+}
+
+class PauseDetector {
+    static trailingSilence(pcm, from) {
+        const need = Math.floor(PAUSE_SECONDS * SAMPLE_RATE);
+        if (pcm.length - from < need + SAMPLE_RATE / 2) return false;
+        let energy = 0;
+        for (let i = pcm.length - need; i < pcm.length; ++i) energy += pcm[i] * pcm[i];
+        return Math.sqrt(energy / need) < PAUSE_RMS;
+    }
+}
+
 class WasmHeap {
     constructor(wasm) {
         this.wasm = wasm;
@@ -116,9 +156,11 @@ export class Pipeline {
         this.joiner = sessions.joiner;
         this.options = options;
         this.decoderDim = 0;
+        this.stream = null;
     }
 
     static async create(options = {}) {
+        await OrtLoader.load(options);
         const wasm = await createVietasrModule();
         const model = options.model || await new AssetFetcher(options.modelUrl || MODEL_BASE_URL).loadModel();
         const maxActivePaths = options.maxActivePaths ?? 4;
@@ -133,13 +175,68 @@ export class Pipeline {
         return new Pipeline(wasm, { encoder, decoder, joiner }, { maxActivePaths });
     }
 
+    startStream() {
+        this.wasm.ccall("vietasr_wasm_reset", null, [], []);
+        this.stream = new StreamState();
+    }
+
+    async pushStream(pcm, sampleRate = SAMPLE_RATE) {
+        if (!this.stream) this.startStream();
+        this.appendPcm(pcm, sampleRate);
+        const all = this.currentPcm();
+        const st = this.stream;
+        const pending = all.length - st.commitOffset;
+        if (pending > MAX_WINDOW_SECONDS * SAMPLE_RATE) {
+            const [start, len] = SegmentPlanner.plan(all.subarray(st.commitOffset))[0];
+            await this.commit(st.commitOffset + start, len);
+        } else if (PauseDetector.trailingSilence(all, st.commitOffset)) {
+            await this.commit(st.commitOffset, pending);
+        } else {
+            const growth = Math.max(PARTIAL_SECONDS * SAMPLE_RATE, st.partialDecodedLength / 4);
+            if (pending >= st.partialDecodedLength + growth) {
+                st.partial = await this.decodeWindow(st.commitOffset, pending);
+                st.partialDecodedLength = pending;
+            }
+        }
+        return st.text();
+    }
+
+    async finishStream() {
+        if (!this.stream) return "";
+        const st = this.stream;
+        const length = this.wasm.ccall("vietasr_wasm_pcm_length", "number", [], []);
+        if (length > st.commitOffset) await this.commit(st.commitOffset, length - st.commitOffset);
+        const text = st.text();
+        this.stream = null;
+        return text;
+    }
+
+    async commit(start, len) {
+        const st = this.stream;
+        const text = await this.decodeWindow(start, len);
+        if (text) st.committed.push(text);
+        st.commitOffset = start + len;
+        st.partial = "";
+        st.partialDecodedLength = 0;
+    }
+
+    appendPcm(pcm, sampleRate) {
+        const wasm = this.wasm;
+        this.heap.withFloats(pcm, (ptr) =>
+            wasm.ccall("vietasr_wasm_accept_pcm", "number", ["number", "number", "number"], [ptr, pcm.length, sampleRate]));
+    }
+
+    currentPcm() {
+        const wasm = this.wasm;
+        const length = wasm.ccall("vietasr_wasm_pcm_length", "number", [], []);
+        return this.heap.floats(wasm.ccall("vietasr_wasm_pcm_ptr", "number", [], []), length);
+    }
+
     async transcribe(pcm, sampleRate = SAMPLE_RATE) {
         const wasm = this.wasm;
         wasm.ccall("vietasr_wasm_reset", null, [], []);
-        this.heap.withFloats(pcm, (ptr) =>
-            wasm.ccall("vietasr_wasm_accept_pcm", "number", ["number", "number", "number"], [ptr, pcm.length, sampleRate]));
-        const length = wasm.ccall("vietasr_wasm_pcm_length", "number", [], []);
-        const resampled = this.heap.floats(wasm.ccall("vietasr_wasm_pcm_ptr", "number", [], []), length);
+        this.appendPcm(pcm, sampleRate);
+        const resampled = this.currentPcm();
         const texts = [];
         for (const [start, len] of SegmentPlanner.plan(resampled)) {
             const text = await this.decodeWindow(start, len);

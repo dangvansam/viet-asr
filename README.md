@@ -3,7 +3,7 @@
 ### Nói tiếng Việt — nhận văn bản chuẩn.
 
 **Speak Vietnamese. Get publish-ready text.** Casing, punctuation and numbers come
-straight out of the model — offline, on-device, one C++ core, nine language bindings.
+straight out of the model — offline, on-device, one C++ core, ten language bindings.
 
 ```python
 import vietasr
@@ -167,6 +167,22 @@ minSdk 24. The AAR bundles `arm64-v8a`, `armeabi-v7a` and `x86_64`. From git: cl
 </details>
 
 <details>
+<summary>🍎 <b>iOS / macOS</b> — Swift Package</summary>
+
+Swift Package Manager — add the package and `import VietASR`:
+
+```swift
+.package(url: "https://github.com/dangvansam/viet-asr.git", from: "0.1.0")
+```
+
+iOS 13+ / macOS 11+ (runs on every release up to the latest). The package
+ships `CVietASR.xcframework` (iOS device + simulator + macOS), with the ASR
+model and ONNX Runtime baked in. From git:
+clone, then `bash bindings/apple/build-xcframework.sh` and open
+`bindings/apple/Package.swift`. See [bindings/apple/README.md](bindings/apple/README.md).
+</details>
+
+<details>
 <summary>⚙️ <b>C / C++</b> — link <code>libvietasr</code></summary>
 
 ```bash
@@ -289,7 +305,7 @@ into the SDK (no download), and it runs in **batch and streaming** alike —
 | Model size | — | 0.8–3 GB | **78 MB** |
 | Vietnamese tuned | generic | generic | **purpose-built** |
 | Runs in a browser | ❌ | hard | ✅ WASM |
-| Languages / bindings | SDK-limited | Python-first | **9 bindings** |
+| Languages / bindings | SDK-limited | Python-first | **10 bindings** |
 | Setup | API keys, billing | pip + CUDA | **one line** |
 
 ---
@@ -415,7 +431,14 @@ Console.WriteLine(pipe.Transcribe("audio.wav").Text);
 ```js
 import { Pipeline } from "@viet-asr/web";
 const pipe = await Pipeline.create();
+
+// batch
 console.log(await pipe.transcribe(pcmFloat32, 16000));
+
+// streaming — partial captions as you speak ("bốn mươi" → "40" via on-device ITN)
+pipe.startStream();
+const partial = await pipe.pushStream(micChunk, sampleRate);
+const final = await pipe.finishStream();
 ```
 </details>
 
@@ -456,16 +479,17 @@ Full design: [docs/architecture.md](docs/architecture.md).
 - ✅ Streaming + batch Vietnamese ASR
 - ✅ Voice activity detection — speech-or-not classification, 3 backends (Silero / TEN-VAD / energy)
 - ✅ Built-in ITN, punctuation and casing — produced by the ASR model itself
-- ✅ 9 bindings — C, C++, Python, Node.js, Go, Java/Kotlin, C#, Rust, WebAssembly
+- ✅ 10 bindings — C, C++, Python, Node.js, Go, Java/Kotlin, C#, Rust, WebAssembly, Swift
 - ✅ Android native libraries (arm64 / armv7 / x86_64)
+- ✅ iOS / macOS — Swift package + `.xcframework`
 - ✅ Model bundled in the SDK, zero config
 - ✅ Any sample rate, mono / stereo
 - ✅ Endpoint-aware segmentation
 - ✅ Thread-safe multi-stream
+- ✅ Browser: live-microphone streaming
 
 **Coming next**
 
-- ⏳ iOS / macOS — Swift package + `.xcframework`
 - ⏳ Android `.aar` on Maven Central
 - ⏳ `diarization` module — who-spoke-when
 - ⏳ `gender` / `emotion` / `dialect` / `noise` modules
