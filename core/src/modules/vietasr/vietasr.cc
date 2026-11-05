@@ -5,6 +5,7 @@
 #include <cmath>
 #include <utility>
 
+#include "modules/vietasr/model_fetcher.h"
 #include "utils/json.h"
 #include "vietasr/engine.h"
 #include "vietasr/logger.h"
@@ -61,6 +62,7 @@ VietAsrConfig VietAsrConfig::Parse(const std::string& json) {
     cfg.itn = ReadBool(json, "itn", cfg.itn);
     cfg.emit_words = ReadBool(json, "emit_words", cfg.emit_words);
     if (cfg.emit_words) cfg.emit_segments = true;
+    cfg.download = ReadBool(json, "download", cfg.download);
     JsonGetString(json, "model_dir", &cfg.model_dir);
     JsonGetString(json, "vad_backend", &cfg.segmenter.backend);
     double threshold = 0.0;
@@ -214,11 +216,21 @@ Status VietAsrModule::Init(const ModuleConfig& config, ModelManager* models, Eng
 #endif
     segmenter_ = std::make_unique<UtteranceSegmenter>(config_.segmenter);
 
-    std::string cache_dir = models ? models->cache_dir() : std::string();
-    TransducerAssets assets = TransducerAssetLoader::Resolve(config_.model_dir, cache_dir);
+    TransducerModelFetcher fetcher(models);
+    TransducerAssets assets = TransducerAssetLoader::Resolve(config_.model_dir, fetcher.CacheDir());
+    if (!assets.complete() && config_.download && !TransducerModelFetcher::OfflineByEnvironment()) {
+        std::string local_dir;
+        Status fetched = fetcher.Fetch(&local_dir);
+        if (!fetched.ok()) {
+            return Status::Error(-6, "vietasr: model download failed: " + fetched.message()
+                + ". Download the files from " + TransducerModelFetcher::BaseUrl()
+                + " and set VIETASR_ASR_MODEL_DIR or the module's model_dir");
+        }
+        assets = TransducerAssetLoader::FromDirectory(local_dir);
+    }
     if (!assets.complete()) {
-        VIETASR_LOG_WARN("vietasr") << "no transducer model found; vietasr will return empty results";
-        return Status::Ok();
+        return Status::Error(-6, "vietasr: no model found (set VIETASR_ASR_MODEL_DIR or the module's model_dir, "
+            "or allow the download from " + TransducerModelFetcher::BaseUrl() + ")");
     }
     auto units = std::make_shared<Units>();
     Status status = units->LoadFromText(assets.tokens);
@@ -228,8 +240,7 @@ Status VietAsrModule::Init(const ModuleConfig& config, ModelManager* models, Eng
     auto model = std::make_shared<TransducerModel>();
     status = model->Load(engine, assets);
     if (!status.ok()) {
-        VIETASR_LOG_WARN("vietasr") << "model load failed: " << status.message();
-        return Status::Ok();
+        return Status::Error(status.code(), "vietasr: model load failed from " + assets.origin + ": " + status.message());
     }
     model_ = model;
     units_ = units;

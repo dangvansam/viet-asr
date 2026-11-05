@@ -22,13 +22,12 @@ FROM ${CUDA_IMAGE} AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake git curl ca-certificates xz-utils \
+        build-essential cmake git curl ca-certificates xz-utils libcurl4-openssl-dev \
         python3.12 python3.12-venv python3.12-dev python3-pip python3-build \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 COPY core/ core/
-COPY models/ models/
 COPY bindings/python/ bindings/python/
 
 # Build the binding wheel against the CUDA ONNX Runtime. scikit-build-core picks
@@ -63,18 +62,24 @@ RUN python3.12 -m venv /opt/venv \
     && find /opt/venv -name '__pycache__' -type d -prune -exec rm -rf {} + \
     && find /opt/venv -name '*.pyc' -delete
 
+RUN VIETASR_MODEL_DIR=/opt/vietasr-models /opt/venv/bin/python -c \
+        "import vietasr; vietasr.Pipeline.preset('transcribe').build()" \
+    && ls -la /opt/vietasr-models/vietasr/*/
+
 # ---- runtime --------------------------------------------------------------
 FROM ${CUDA_IMAGE} AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.12 ca-certificates \
+        python3.12 ca-certificates libcurl4t64 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=builder /opt/vietasr-models /opt/vietasr-models
 
-ENV PATH=/opt/venv/bin:$PATH
+ENV PATH=/opt/venv/bin:$PATH \
+    VIETASR_MODEL_DIR=/opt/vietasr-models
 # NOTE: do NOT set VIETASR_ONNX_VARIANT here — that variable tells the Python
 # loader to *download* a GPU bundle, but this image already has it baked in.
 # The C++ engine auto-detects the CUDA provider from the bundled runtime.

@@ -5,8 +5,9 @@ that powers every other VietASR binding.
 
 - **Platforms:** iOS 13+, macOS 11+ — device + simulator. One build runs on
   those versions and every newer release (through the current iOS / macOS).
-- **Self-contained:** the ~66 MB ASR model and ONNX Runtime are baked into the
-  framework — no downloads, no network, no API keys.
+- **Self-contained:** the ~78 MB ASR model and ONNX Runtime are baked into the
+  framework — no downloads at runtime, no network, no API keys. The build script
+  fetches the model from Hugging Face (pinned revision, SHA-256 checked).
 
 ### Supported OS range
 

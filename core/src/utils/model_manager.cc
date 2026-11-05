@@ -14,7 +14,7 @@ class ModelManager::Impl {
 public:
     std::mutex mutex;
     std::string cache_dir;
-    std::string manifest_url{"https://cdn.vietasr.io/manifest.json"};
+    std::string manifest_url;
     std::unordered_map<std::string, ModelBundle> bundles;
     HttpClient http;
 };
@@ -80,6 +80,9 @@ Status ModelManager::EnsureBundle(const ModelBundle& bundle, std::string* local_
 }
 
 Status ModelManager::LoadManifest() {
+    if (impl_->manifest_url.empty()) {
+        return Status::Error(-2, "no manifest url configured");
+    }
     std::vector<unsigned char> body;
     auto status = impl_->http.Get(impl_->manifest_url, &body);
     if (!status.ok()) {

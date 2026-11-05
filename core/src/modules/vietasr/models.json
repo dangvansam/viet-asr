@@ -1,0 +1,36 @@
+{
+  "module": "vietasr",
+  "repo": "dangvansam/viet-asr",
+  "revision": "46adacf22d379e3d6b860d5d08e9fb02cbc122ea",
+  "base_url": "https://huggingface.co/dangvansam/viet-asr/resolve/46adacf22d379e3d6b860d5d08e9fb02cbc122ea/int8/",
+  "files": [
+    {
+      "role": "encoder",
+      "name": "encoder.int8.onnx",
+      "size": 72828389,
+      "sha256": "571b7801b887b1ec65630ef3adcf6c3fed610ccdaf4b8c4f8af9d2bbe558331d",
+      "md5": "21d0188d23b909db15b58d4abeb40c4e"
+    },
+    {
+      "role": "decoder",
+      "name": "decoder.int8.onnx",
+      "size": 4478997,
+      "sha256": "7158b5a057fc56a03df5a95ebc5307d5a58bd67c3180b80c4068056104a9d41c",
+      "md5": "f106c6fb7d24146cec50d5aba2490135"
+    },
+    {
+      "role": "joiner",
+      "name": "joiner.int8.onnx",
+      "size": 4228494,
+      "sha256": "857ed7495ac0d7b109fe881a45ed56e0b54de279adc35c9364bfc721358f599a",
+      "md5": "80cbbbb92966d80b8c11c4f14cf4a72e"
+    },
+    {
+      "role": "tokens",
+      "name": "tokens.txt",
+      "size": 106912,
+      "sha256": "bcf511255ff5a63c6572885accac84265203fba0be304b7243cb912c3975d1e4",
+      "md5": "18f2f121de1e6a0b42a84fdcc00b191d"
+    }
+  ]
+}

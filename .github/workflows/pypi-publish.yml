@@ -102,11 +102,12 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: "13.3"
           # The package's CMake builds ../../core, which sits outside the package
           # directory cibuildwheel mounts into the manylinux container. Mount core
-          # and models so /project/../../core and core/../models resolve inside it.
+          # so /project/../../core resolves inside it.
           CIBW_CONTAINER_ENGINE: >-
             docker; create_args:
             --volume=${{ github.workspace }}/core:/core
-            --volume=${{ github.workspace }}/models:/models
+          CIBW_BEFORE_ALL_LINUX: "dnf install -y libcurl-devel"
+          CIBW_ENVIRONMENT: 'SKBUILD_CMAKE_DEFINE="VIETASR_REQUIRE_HTTP=ON"'
           # Windows runtime DLLs are already bundled next to the lib by CMake.
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: ""
         run: |

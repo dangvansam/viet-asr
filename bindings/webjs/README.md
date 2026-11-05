@@ -25,8 +25,9 @@ as every native binding (`KaldiFbank`, `TransducerBeamSearch`, `PostProcessor`,
 WASM asks for decoder contexts and joiner inputs, JS runs them through
 onnxruntime-web, WASM consumes the outputs.
 
-The model (~78 MB int8, three ONNX files) is fetched at runtime from the release
-pinned on jsDelivr — override with `modelUrl`. Output already carries casing,
+The model (~78 MB int8, three ONNX files + `tokens.txt`) is fetched at runtime from
+Hugging Face ([dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr), pinned
+revision, size + SHA-256 checked) — override with `modelUrl`. Output already carries casing,
 punctuation and written-form numbers.
 
 ## Install
@@ -86,8 +87,9 @@ bash build-wasm.sh
 npm install
 ```
 
-The demo loads the model from the repo's `models/vietasr/`, so serve the
-**repository root** over HTTP (WASM, workers and `fetch` all need a real origin):
+The demo fetches the model from Hugging Face (append `?model=<base URL>` to use a
+mirror). Serve the **repository root** over HTTP (WASM, workers and `fetch` all need
+a real origin):
 
 ```bash
 # from the repo root
@@ -101,7 +103,7 @@ The microphone needs a secure context — `localhost` qualifies.
 
 | Method | Signature | Notes |
 |---|---|---|
-| `Pipeline.create` | `(options?) => Promise<Pipeline>` | fetches + verifies the chunked model, inits WASM + 3 ORT sessions |
+| `Pipeline.create` | `(options?) => Promise<Pipeline>` | fetches + verifies the model, inits WASM + 3 ORT sessions |
 | `pipeline.transcribe` | `(pcm: Float32Array, sampleRate?) => Promise<string>` | full clip; audio > 30 s is split at the quietest point |
 | `pipeline.startStream` | `() => void` | begin a streaming session |
 | `pipeline.pushStream` | `(pcm: Float32Array, sampleRate?) => Promise<string>` | feed a chunk; returns committed sentences + current partial |
@@ -111,7 +113,7 @@ The microphone needs a secure context — `localhost` qualifies.
 
 | Field | Default | |
 |---|---|---|
-| `modelUrl` | jsDelivr release | base URL with `chunks.json`, `tokens.txt`, `*.partNN` |
+| `modelUrl` | Hugging Face, pinned revision | base URL holding `encoder.int8.onnx`, `decoder.int8.onnx`, `joiner.int8.onnx`, `tokens.txt` |
 | `model` | — | preloaded `{encoder, decoder, joiner, tokens}` (skips fetching) |
 | `maxActivePaths` | `4` | beam width; `1` = greedy |
 | `executionProviders` | `["wasm"]` | encoder EPs, e.g. `["webgpu", "wasm"]` |

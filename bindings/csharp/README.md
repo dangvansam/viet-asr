@@ -56,7 +56,7 @@ Console.WriteLine(result.Field("gender"));   // JsonElement?
 
 | Type | Member | Notes |
 |---|---|---|
-| `Pipeline` | `Preset(string)` | static; model bundled in the SDK |
+| `Pipeline` | `Preset(string)` | static; downloads the model on first use |
 | `Pipeline` | `Create()` | static; empty pipeline |
 | `Pipeline` | `Add(module)` / `Add(module, jsonConfig)` | fluent |
 | `Pipeline` | `SetBackend(Backend)` | `Auto`, `Onnx`, `CoreML` |
@@ -102,6 +102,13 @@ dotnet pack Vietasr/Vietasr.csproj -c Release
 
 ## Models
 
-The vietasr model is **bundled inside the SDK** — no download, no network. The int8 Zipformer
-transducer (encoder + decoder + joiner, ~78 MB) is committed to the repo as <50 MB chunks and baked into the native `libvietasr`
-shipped in the NuGet package.
+The vietasr model (int8 Zipformer transducer — encoder + decoder + joiner + `tokens.txt`,
+~78 MB) is **not shipped in the package**. On first use the native `libvietasr` downloads it
+from Hugging Face ([dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr), pinned
+revision, MD5-checked) into `~/.cache/vietasr/` (Linux), `~/Library/Caches/vietasr/`
+(macOS) or `%LOCALAPPDATA%\vietasr\` (Windows); after that it runs fully offline.
+Linux needs the system `libcurl` (`libcurl4`), which nearly every distribution has.
+
+- `VIETASR_ASR_MODEL_DIR=/path/to/model` — use local files, no download
+- `VIETASR_MODEL_BASE_URL=https://mirror/...` — download from a mirror
+- `VIETASR_OFFLINE=1` — never download; building the pipeline fails if no model is found

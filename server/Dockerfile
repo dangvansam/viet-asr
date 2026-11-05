@@ -8,15 +8,14 @@
 FROM python:3.12-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake git curl ca-certificates xz-utils \
+        build-essential cmake git curl ca-certificates xz-utils libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 COPY core/ core/
-COPY models/ models/
 COPY bindings/python/ bindings/python/
 
-# Build the native binding wheel (libvietasr + onnxruntime + model embedded).
+# Build the native binding wheel (libvietasr + onnxruntime; the model is fetched below).
 RUN pip install --no-cache-dir build \
     && python -m build --wheel --outdir /wheels bindings/python
 
@@ -55,8 +54,15 @@ RUN python -m venv /opt/venv \
     && find /opt/venv -name '__pycache__' -type d -prune -exec rm -rf {} + \
     && find /opt/venv -name '*.pyc' -delete
 
+RUN VIETASR_MODEL_DIR=/opt/vietasr-models /opt/venv/bin/python -c \
+        "import vietasr; vietasr.Pipeline.preset('transcribe').build()" \
+    && ls -la /opt/vietasr-models/vietasr/*/
+
 # ---- runtime --------------------------------------------------------------
 FROM python:3.12-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends libcurl4t64 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Drop the base image's pip/ensurepip — not needed to run the server.
 RUN rm -rf /usr/local/lib/python3.12/site-packages/pip* \
@@ -66,8 +72,10 @@ RUN rm -rf /usr/local/lib/python3.12/site-packages/pip* \
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=builder /opt/vietasr-models /opt/vietasr-models
 
-ENV PATH=/opt/venv/bin:$PATH
+ENV PATH=/opt/venv/bin:$PATH \
+    VIETASR_MODEL_DIR=/opt/vietasr-models
 
 RUN useradd --create-home --uid 10001 vietasr
 USER vietasr

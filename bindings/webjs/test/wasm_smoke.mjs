@@ -1,11 +1,12 @@
 import { readFileSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
 
 import createVietasrModule from "../dist/vietasr-core.js";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const tokensPath = process.argv[2] || join(here, "../../../models/vietasr/tokens.txt");
+const tokensPath = process.argv[2];
+if (!tokensPath) {
+    console.error("usage: node test/wasm_smoke.mjs <tokens.txt>  (from the Hugging Face model, e.g. ~/.cache/vietasr/vietasr/<rev>/tokens.txt)");
+    process.exit(2);
+}
 
 class SmokeTest {
     constructor(wasm) {

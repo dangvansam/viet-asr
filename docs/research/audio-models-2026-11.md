@@ -1,6 +1,6 @@
 # Candidate audio models — integration study (2026-11-04)
 
-ASR = the bundled int8 Zipformer-vi transducer. WER is `spoken_canonical` unless noted.
+ASR = the int8 viet-asr Zipformer transducer. WER is `spoken_canonical` unless noted.
 
 ## Speech enhancement — NVIDIA NemotronLabs RE-USE
 

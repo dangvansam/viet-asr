@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(vietasr_android LANGUAGES C CXX)
+project(vietasr_android LANGUAGES C CXX ASM)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,8 +32,6 @@ set(VIETASR_CORE_SOURCES
     "${VIETASR_CORE_DIR}/src/result_builder.cc"
     "${VIETASR_CORE_DIR}/src/module_registry.cc"
     "${VIETASR_CORE_DIR}/src/preset_registry.cc"
-    # Provides EmbeddedAsrVocab()/EmbeddedAsrModel() — stubs here (Android
-    # downloads the model at runtime); without it vietasr.cc fails to link.
     "${VIETASR_CORE_DIR}/src/embedded_model.cc"
     "${VIETASR_CORE_DIR}/src/engines/engine_factory.cc"
     "${VIETASR_CORE_DIR}/src/engines/engine_onnx.cc"
@@ -49,6 +47,7 @@ set(VIETASR_CORE_SOURCES
     "${VIETASR_CORE_DIR}/src/utils/md5.cc"
     "${VIETASR_CORE_DIR}/src/modules/vietasr/vietasr.cc"
     "${VIETASR_CORE_DIR}/src/modules/vietasr/transducer_model.cc"
+    "${VIETASR_CORE_DIR}/src/modules/vietasr/model_fetcher.cc"
     "${VIETASR_CORE_DIR}/src/modules/vietasr/transducer_search.cc"
     "${VIETASR_CORE_DIR}/src/modules/vietasr/transducer_decoder.cc"
     "${VIETASR_CORE_DIR}/src/modules/vietasr/utterance_segmenter.cc"
@@ -66,11 +65,16 @@ set(VIETASR_CORE_SOURCES
     "${VIETASR_CORE_DIR}/presets/transcribe.cc"
 )
 
-add_library(vietasr SHARED ${VIETASR_CORE_SOURCES} vietasr_jni.cc)
+include("${VIETASR_CORE_DIR}/cmake/EmbedModel.cmake")
+vietasr_model_source_header(VIETASR_MODEL_SOURCE_INCLUDE_DIR)
+vietasr_embed_model(VIETASR_EMBED_SOURCES)
+
+add_library(vietasr SHARED ${VIETASR_CORE_SOURCES} ${VIETASR_EMBED_SOURCES} vietasr_jni.cc)
 target_include_directories(vietasr PRIVATE
     "${VIETASR_CORE_DIR}/include"
     "${VIETASR_CORE_DIR}/src"
     "${ORT_INCLUDE_DIR}"
+    "${VIETASR_MODEL_SOURCE_INCLUDE_DIR}"
 )
 target_compile_definitions(vietasr PRIVATE
     VIETASR_BACKEND_ONNX_ENABLED=1
@@ -78,6 +82,7 @@ target_compile_definitions(vietasr PRIVATE
     # onnxruntime-android bundles the XNNPACK EP (generic registration, no extra
     # header) and the NNAPI EP (enabled below when its factory header is found).
     VIETASR_EP_XNNPACK_AVAILABLE=1
+    VIETASR_HAS_EMBEDDED_MODEL=1
 )
 if(EXISTS "${ORT_INCLUDE_DIR}/nnapi_provider_factory.h")
     target_compile_definitions(vietasr PRIVATE VIETASR_EP_NNAPI_AVAILABLE=1)

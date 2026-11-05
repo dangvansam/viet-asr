@@ -158,7 +158,9 @@ The demo expects a `sample.wav` (16 kHz mono 16-bit PCM) in `demo/src/main/asset
 
 ## Models
 
-The vietasr model is **bundled inside the SDK** — no download, no network, no asset
-copying. The int8 Zipformer
-transducer (encoder + decoder + joiner, ~78 MB) is committed to the repo as <50 MB chunks and baked into the
-native `libvietasr` shipped in the AAR.
+The vietasr model is **embedded in the AAR** — no download at runtime, no network, no
+asset copying. `build-jnilibs.sh` downloads the int8 Zipformer transducer (encoder + decoder +
+joiner + `tokens.txt`, ~78 MB) from Hugging Face
+([dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr), pinned revision, SHA-256
+checked) and bakes it into `libvietasr`. Build offline with
+`-DVIETASR_MODEL_SOURCE_DIR=<folder with the four files>`.

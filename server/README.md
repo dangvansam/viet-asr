@@ -5,8 +5,9 @@ Offline Vietnamese speech-to-text as a server:
 - **`POST /v1/audio/transcriptions`** — OpenAI-compatible batch transcription.
 - **`WebSocket /v1/stream`** — low-latency streaming transcription.
 
-One process serves both. The model is embedded in the SDK — no downloads, no
-API keys, no cloud.
+One process serves both. The Docker images include the model (fetched from
+Hugging Face at image build), so the container runs offline — no API keys, no
+cloud. Run outside Docker, the SDK downloads the model once on first use.
 
 ## Run it — one command
 

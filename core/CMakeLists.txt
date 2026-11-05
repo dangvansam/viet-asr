@@ -33,10 +33,14 @@ set_property(CACHE VIETASR_ONNX_VARIANT PROPERTY STRINGS cpu cuda directml)
 
 message(STATUS "vietasr backend: onnx=${VIETASR_BACKEND_ONNX} variant=${VIETASR_ONNX_VARIANT}")
 
-option(VIETASR_WITH_CURL "Use libcurl for HTTP model downloads" ON)
+option(VIETASR_WITH_CURL "Use libcurl for HTTP model downloads (Linux, macOS)" ON)
+option(VIETASR_REQUIRE_HTTP "Fail the configure step when no HTTP backend is available" OFF)
+set(VIETASR_WITH_WINHTTP OFF)
 
-# iOS has no system libcurl, and the embedded model needs no HTTP downloads.
-if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+if(WIN32)
+    set(VIETASR_WITH_CURL OFF)
+    set(VIETASR_WITH_WINHTTP ON)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR ANDROID OR EMSCRIPTEN)
     set(VIETASR_WITH_CURL OFF)
 endif()
 
@@ -46,6 +50,10 @@ if(VIETASR_WITH_CURL)
         message(STATUS "libcurl not found; HTTP downloads will be stubbed")
         set(VIETASR_WITH_CURL OFF)
     endif()
+endif()
+
+if(VIETASR_REQUIRE_HTTP AND NOT VIETASR_WITH_CURL AND NOT VIETASR_WITH_WINHTTP)
+    message(FATAL_ERROR "VIETASR_REQUIRE_HTTP=ON but no HTTP backend was found (install libcurl development files)")
 endif()
 
 if(VIETASR_BACKEND_ONNX)
@@ -174,7 +182,7 @@ option(VIETASR_MODULE_EMOTION      "Build emotion module (Phase 15 stub)" ON)
 option(VIETASR_MODULE_DIALECT      "Build dialect module (Phase 16 stub)" ON)
 option(VIETASR_MODULE_NOISE        "Build noise module (Phase 17 stub)" ON)
 
-option(VIETASR_EMBED_MODEL "Embed the vietasr model into libvietasr at build time" ON)
+option(VIETASR_EMBED_MODEL "Download the vietasr model from Hugging Face at build time and embed it into libvietasr" OFF)
 option(VIETASR_EMBED_ITN   "Embed the Vietnamese ITN grammar into libvietasr" ON)
 
 # vad-module backends. The neural backends additionally require ONNX Runtime;
@@ -295,6 +303,7 @@ if(VIETASR_MODULE_VIETASR)
     list(APPEND VIETASR_CORE_SOURCES
         src/modules/vietasr/vietasr.cc
         src/modules/vietasr/transducer_model.cc
+        src/modules/vietasr/model_fetcher.cc
         src/modules/vietasr/transducer_search.cc
         src/modules/vietasr/transducer_decoder.cc
         src/modules/vietasr/utterance_segmenter.cc
@@ -423,13 +432,16 @@ list(APPEND VIETASR_CORE_SOURCES
 
 list(APPEND VIETASR_CORE_SOURCES src/embedded_model.cc)
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ModelSource.cmake)
+vietasr_model_source_header(VIETASR_MODEL_SOURCE_INCLUDE_DIR)
+
 if(VIETASR_EMBED_MODEL)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedModel.cmake)
     vietasr_embed_model(VIETASR_EMBED_SOURCES)
     list(APPEND VIETASR_CORE_SOURCES ${VIETASR_EMBED_SOURCES})
     message(STATUS "vietasr: VIETASR_EMBED_MODEL=ON (model baked into libvietasr)")
 else()
-    message(STATUS "vietasr: VIETASR_EMBED_MODEL=OFF (vietasr module will have no model)")
+    message(STATUS "vietasr: VIETASR_EMBED_MODEL=OFF (model downloaded from Hugging Face on first use)")
 endif()
 
 add_library(vietasr_objects OBJECT ${VIETASR_CORE_SOURCES})
@@ -438,6 +450,8 @@ target_include_directories(vietasr_objects
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+    PRIVATE
+        ${VIETASR_MODEL_SOURCE_INCLUDE_DIR}
 )
 if(WIN32)
     target_compile_definitions(vietasr_objects PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
@@ -492,6 +506,10 @@ if(VIETASR_WITH_CURL)
     target_compile_definitions(vietasr_objects PRIVATE VIETASR_WITH_CURL=1)
     target_link_libraries(vietasr_objects PUBLIC CURL::libcurl)
 endif()
+if(VIETASR_WITH_WINHTTP)
+    target_compile_definitions(vietasr_objects PRIVATE VIETASR_WITH_WINHTTP=1)
+    target_link_libraries(vietasr_objects PUBLIC winhttp)
+endif()
 
 if(VIETASR_HAS_ONNXRUNTIME)
     target_compile_definitions(vietasr_objects PRIVATE VIETASR_HAS_ONNXRUNTIME=1)
@@ -517,6 +535,9 @@ target_include_directories(vietasr
 
 if(VIETASR_WITH_CURL)
     target_link_libraries(vietasr PUBLIC CURL::libcurl)
+endif()
+if(VIETASR_WITH_WINHTTP)
+    target_link_libraries(vietasr PUBLIC winhttp)
 endif()
 if(VIETASR_HAS_ONNXRUNTIME AND ONNXRUNTIME_LIB)
     target_link_libraries(vietasr PUBLIC "${ONNXRUNTIME_LIB}")

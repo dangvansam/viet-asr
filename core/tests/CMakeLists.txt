@@ -12,9 +12,13 @@ function(vietasr_add_test target)
     target_include_directories(${target} PRIVATE
         ${CMAKE_SOURCE_DIR}/include
         ${CMAKE_SOURCE_DIR}/src
+        ${VIETASR_MODEL_SOURCE_INCLUDE_DIR}
     )
     if(VIETASR_WITH_CURL)
         target_link_libraries(${target} PRIVATE CURL::libcurl)
+    endif()
+    if(VIETASR_WITH_WINHTTP)
+        target_link_libraries(${target} PRIVATE winhttp)
     endif()
     if(VIETASR_HAS_ONNXRUNTIME)
         target_link_libraries(${target} PRIVATE "${ONNXRUNTIME_LIB}")

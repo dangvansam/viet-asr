@@ -69,9 +69,7 @@
         const runBtn = document.getElementById("run");
         const fileInput = document.getElementById("file");
 
-        // The model lives in the repo at models/vietasr/. Resolved relative to
-        // this page, so serve the repo root (see bindings/webjs/README.md).
-        const modelUrl = new URL("../../../models/vietasr/", location.href).href;
+        const modelUrl = new URLSearchParams(location.search).get("model") || undefined;
 
         const worker = new Worker(
             new URL("./asr-worker.js", import.meta.url), { type: "module" });

@@ -55,7 +55,7 @@ println!("{}", result.raw_json);
 
 | Item | Signature | Notes |
 |---|---|---|
-| `Pipeline::preset` | `(name: &str) -> Result<Pipeline>` | model bundled in the SDK |
+| `Pipeline::preset` | `(name: &str) -> Result<Pipeline>` | downloads the model on first use |
 | `Pipeline::new` | `() -> Pipeline` | empty pipeline |
 | `Pipeline::add` | `(&mut self, module: &str) -> Result<&mut Self>` | fluent |
 | `Pipeline::add_with_config` | `(&mut self, module: &str, json: &str) -> Result<&mut Self>` | |
@@ -95,6 +95,13 @@ cargo build --release --examples
 
 ## Models
 
-The vietasr model is **bundled inside the SDK** — no download, no network. The int8 Zipformer
-transducer (encoder + decoder + joiner, ~78 MB) is committed to the repo as <50 MB chunks and baked into the native `libvietasr` this
-crate links against.
+The vietasr model (int8 Zipformer transducer — encoder + decoder + joiner + `tokens.txt`,
+~78 MB) is **not shipped in the package**. On first use the native `libvietasr` downloads it
+from Hugging Face ([dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr), pinned
+revision, MD5-checked) into `~/.cache/vietasr/` (Linux), `~/Library/Caches/vietasr/`
+(macOS) or `%LOCALAPPDATA%\vietasr\` (Windows); after that it runs fully offline.
+Linux needs the system `libcurl` (`libcurl4`), which nearly every distribution has.
+
+- `VIETASR_ASR_MODEL_DIR=/path/to/model` — use local files, no download
+- `VIETASR_MODEL_BASE_URL=https://mirror/...` — download from a mirror
+- `VIETASR_OFFLINE=1` — never download; building the pipeline fails if no model is found

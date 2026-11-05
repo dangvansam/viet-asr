@@ -43,6 +43,7 @@ struct VietAsrConfig final {
     bool emit_voiced_regions{false};
     bool itn{false};
     bool emit_words{false};
+    bool download{true};
     std::string model_dir;
     UtteranceSegmenterConfig segmenter;
 

@@ -1,0 +1,28 @@
+#ifndef VIETASR_MODEL_SOURCE_H
+#define VIETASR_MODEL_SOURCE_H
+
+#include <cstddef>
+
+namespace vietasr {
+namespace model_source {
+
+struct File final {
+    const char* role;
+    const char* name;
+    unsigned long long size;
+    const char* md5;
+};
+
+inline constexpr const char* kRepo = "@VIETASR_MODEL_REPO@";
+inline constexpr const char* kRevision = "@VIETASR_MODEL_REVISION@";
+inline constexpr const char* kBaseUrl = "@VIETASR_MODEL_BASE_URL@";
+
+inline constexpr File kFiles[] = {
+@VIETASR_MODEL_FILE_ENTRIES@};
+
+inline constexpr std::size_t kFileCount = sizeof(kFiles) / sizeof(kFiles[0]);
+
+}
+}
+
+#endif

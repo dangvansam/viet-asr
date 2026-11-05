@@ -10,6 +10,8 @@ pip install vietasr
 
 The wheel ships a prebuilt `libvietasr.{so,dylib,dll}` for your platform under `vietasr/_native/`. No system dependencies.
 
+The ~78 MB model is downloaded from Hugging Face ([dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr)) the first time a pipeline is built and cached under `~/.cache/vietasr/`; later runs are offline. Set `VIETASR_ASR_MODEL_DIR` to a folder with the model files to skip the download, or `VIETASR_OFFLINE=1` to forbid it.
+
 ## Quickstart
 
 ```python

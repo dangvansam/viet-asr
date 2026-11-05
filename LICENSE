@@ -18,5 +18,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-NOTE on bundled models: speech models in this SDK are distributed under
-separate licenses. See models/MANIFEST.md and reference/ORIGIN.md.
+NOTE on models: speech models used by this SDK are distributed under
+separate licenses. The viet-asr model is downloaded from Hugging Face
+(https://huggingface.co/dangvansam/viet-asr, Apache-2.0); the bundled VAD
+models are listed in core/src/modules/vad/README.md.

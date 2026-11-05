@@ -38,12 +38,6 @@ models/cache/
 *.onnx
 vocab.txt
 !core/src/modules/*/models.json
-!reference/**
-
-# Bundled vietasr transducer: <50 MB chunks + chunks.json + tokens.txt, embedded at build.
-!models/vietasr/*.part*
-!models/vietasr/chunks.json
-!models/vietasr/tokens.txt
 
 # Bundled VAD models: small enough to commit whole, embedded into libvietasr.
 !core/models/vad/silero_vad.onnx

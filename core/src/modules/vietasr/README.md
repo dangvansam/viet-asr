@@ -46,10 +46,13 @@ Pass a JSON object to `pipeline.add("vietasr", {...})`:
 | `adaptive_long_ms` / `adaptive_long_silence_ms` | int | `10000` / `300` | After 10 s of speech, a 300 ms pause ends the utterance |
 | `speech_pad_ms` | int | `1000` | Audio kept around each utterance |
 | `max_utterance_ms` | int | `30000` | Longer speech is split at the quietest point of the last 3 s (capped at 38 s — the encoder accepts ≤ 40 s) |
-| `model_dir` | string | — | Load `encoder/decoder/joiner(.int8).onnx` + `tokens.txt` from a folder instead of the embedded model |
+| `model_dir` | string | — | Load `encoder/decoder/joiner(.int8).onnx` + `tokens.txt` from a folder |
+| `download` | bool | `true` | Download the model from Hugging Face when no local copy is found |
 | `itn` | bool | `false` | Extra rule-based ITN pass (rarely needed — the model already does ITN) |
 
-Model lookup order: `model_dir` → `$VIETASR_ASR_MODEL_DIR` → embedded → `<cache>/vietasr/`.
+Model lookup order: `model_dir` → `$VIETASR_ASR_MODEL_DIR` → embedded (Android / iOS builds) →
+`<cache>/vietasr/<revision>/` → download from Hugging Face into that cache folder. When none
+of them yields a model, building the pipeline fails with an error naming the download URL.
 
 ## Word timestamps
 
@@ -75,6 +78,8 @@ byte-identical to a batch run over the same audio.
 
 - `vietasr.{h,cc}` — `Module` implementation, config, segment joining
 - `transducer_model.{h,cc}` — encoder/decoder/joiner sessions + model asset resolution
+- `model_fetcher.{h,cc}` — downloads the pinned Hugging Face model into the cache
+- `models.json` — pinned model source (repo, revision, sizes, checksums)
 - `transducer_search.{h,cc}` — modified beam search as a step machine (shared with the WASM binding)
 - `transducer_decoder.{h,cc}` — drives the search with the native ONNX sessions
 - `utterance_segmenter.{h,cc}` — VAD-driven utterance cutting, long-utterance splitting
@@ -83,7 +88,20 @@ byte-identical to a batch run over the same audio.
 
 ## Model files
 
-Committed as <50 MB chunks under `models/vietasr/` and embedded into `libvietasr`:
+The model is not stored in the repository. [models.json](models.json) pins the Hugging Face
+repo ([dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr)), the revision, and every
+file's size, SHA-256 and MD5. It is the single source for all three delivery paths:
+
+- **Runtime download** (default): `model_fetcher.{h,cc}` downloads the files on first use into
+  `<cache>/vietasr/<revision>/`, verifying MD5. HTTP comes from libcurl (Linux, macOS) or WinHTTP
+  (Windows). The cache root is `~/.cache/vietasr` (Linux), `~/Library/Caches/vietasr` (macOS),
+  `%LOCALAPPDATA%\vietasr` (Windows), or `$VIETASR_MODEL_DIR`.
+- **Build-time embedding** (`-DVIETASR_EMBED_MODEL=ON`, used by the Android and Apple builds, which
+  have no system HTTP client): `core/cmake/EmbedModel.cmake` downloads the files with SHA-256
+  checks and bakes them into `libvietasr`. `-DVIETASR_MODEL_SOURCE_DIR=<folder>` embeds local files
+  instead (offline builds).
+- **Browser**: `bindings/webjs/build-wasm.sh` writes the URL and SHA-256 list into
+  `dist/model-config.js`.
 
 | File | Size |
 |---|---|
@@ -92,7 +110,15 @@ Committed as <50 MB chunks under `models/vietasr/` and embedded into `libvietasr
 | `joiner.int8.onnx` | 4.0 MB |
 | `tokens.txt` | 8192 BPE tokens (cased, digits, punctuation, byte fallback) |
 
-Regenerate: `python scripts/split_model.py --model-dir <dir with *.onnx + tokens.txt> --out-dir models/vietasr`
+| Variable | Effect |
+|---|---|
+| `VIETASR_ASR_MODEL_DIR` | Folder with the four files; skips the download |
+| `VIETASR_MODEL_DIR` | Cache root for downloaded models |
+| `VIETASR_MODEL_BASE_URL` | Download from a mirror (same file names) |
+| `VIETASR_OFFLINE=1` | Never download; fail if no local model is found |
+
+To ship a new model: upload it to Hugging Face, then update `revision`, `base_url` and the
+per-file `size` / `sha256` / `md5` in `models.json`.
 
 ## Measured speed
 

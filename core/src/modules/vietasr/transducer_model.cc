@@ -83,13 +83,7 @@ TransducerAssets TransducerAssetLoader::Resolve(const std::string& configured_di
     }
     TransducerAssets embedded = FromEmbedded();
     if (embedded.complete()) return embedded;
-    if (!cache_dir.empty()) {
-        for (const char* sub : {"/vietasr/2", "/vietasr"}) {
-            TransducerAssets cached = FromDirectory(cache_dir + sub);
-            if (cached.complete()) return cached;
-        }
-    }
-    return TransducerAssets{};
+    return FromDirectory(cache_dir);
 }
 
 TransducerModel::TransducerModel() = default;

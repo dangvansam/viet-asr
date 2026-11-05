@@ -55,9 +55,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install patchelf (Linux)
+      - name: Install patchelf + libcurl (Linux)
         if: startsWith(matrix.platform, 'linux')
-        run: sudo apt-get update && sudo apt-get install -y patchelf
+        run: sudo apt-get update && sudo apt-get install -y patchelf libcurl4-openssl-dev
 
       - name: Configure & build core
         shell: bash
@@ -73,7 +73,7 @@ jobs:
             -DVIETASR_INSTALL=OFF \
             -DVIETASR_BUILD_TESTS=OFF \
             -DVIETASR_BUILD_EXAMPLES=OFF \
-            -DVIETASR_EMBED_MODEL=ON \
+            -DVIETASR_REQUIRE_HTTP=ON \
             -DVIETASR_ONNX_VARIANT=${{ matrix.variant }} \
             $extra
           cmake --build build-core --config Release -j
@@ -127,7 +127,7 @@ jobs:
             bindings/apple/artifacts/CVietASR.xcframework.zip.sha256
           if-no-files-found: error
 
-  # ── Cut the GitHub Release and attach the native + model assets ───────────
+  # ── Cut the GitHub Release and attach the native assets ───────────
   github-release:
     name: GitHub Release
     needs: [build-natives, build-apple]
@@ -156,12 +156,6 @@ jobs:
           path: assets
           pattern: native-*
           merge-multiple: true
-
-      - name: Package model
-        run: |
-          ( cd models/vietasr && tar -czf "$GITHUB_WORKSPACE/assets/viet-asr-model.tar.gz" \
-              chunks.json tokens.txt *.part* )
-          ls -la assets
 
       - name: Stamp Apple Package.swift (release URL + checksum)
         # The Swift package's binary target points at this run's xcframework

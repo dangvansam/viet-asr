@@ -4,7 +4,7 @@
 [![PyPI](https://img.shields.io/pypi/v/viet-asr)](https://pypi.org/project/viet-asr/)
 [![Docker](https://img.shields.io/docker/v/dangvansam/viet-asr?label=docker&sort=semver)](https://hub.docker.com/r/dangvansam/viet-asr)
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-dangvansam%2Fviet--asr-yellow)](https://huggingface.co/dangvansam/viet-asr)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#-license)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#license)
 
 **Vietnamese speech in, publish-ready text out — in a single pass.**
 
@@ -14,41 +14,48 @@ print(vietasr.Pipeline.preset("transcribe").transcribe("call.wav").text)
 # → "Vâng, thì em gọi điện lại để tư vấn và hỗ trợ chị tốt hơn ạ."
 ```
 
-## 🌟 Highlights
+## Highlights
 
 - **Already-written text** — casing, punctuation and numbers in written form come straight
   out of the model (`"Ngân sách dưới 50 triệu."`). No ITN step, no punctuation/casing (PnC)
   model, no post-processing chain.
-- **One small model, one pass** — 86M parameters, 78 MB int8, baked into the SDK.
+- **One small model, one pass** — 86M parameters, 78 MB int8, downloaded once from Hugging Face.
 - **28× faster than real time** on a single CPU core, end to end.
-- **Offline and private** — no API keys, no cloud; audio never leaves the device.
+- **Offline and private** — after a one-time download: no API keys, no cloud; audio never leaves the device.
 - **Batch and live streaming** — VAD-segmented captions with partials, word-level
   timestamps, any sample rate.
 - **Runs on any platform** — Linux, Windows, macOS, Android, iOS and the browser (WASM),
   with Python, Node.js, Go, Rust, Java/Kotlin, C#, Swift, C/C++ bindings, a Docker server —
   or the raw ONNX files with sherpa-onnx.
 - **Measured in the open** — WER on public Vietnamese test sets, every system scored on
-  its raw formatted output ([benchmark](#-benchmark)).
+  its raw formatted output ([benchmark](#benchmark)).
 
 ---
 
-## ⚡ Install
+## Install
 
 Every binding wraps the **same C++ core** and produces **byte-identical transcripts**, so
 the API is the same everywhere. Current release: **v0.1.0**.
 
 | Channel | Status |
 |---|---|
-| PyPI · Docker Hub · Go modules · Swift Package · GitHub Packages (Java, Android) | ✅ v0.1.0 |
-| npm (`viet-asr`, `@viet-asr/web`) · crates.io · NuGet | ⏳ next release — install from git for now |
+| PyPI · Docker Hub · Go modules · Swift Package · GitHub Packages (Java, Android) | Published (v0.1.0) |
+| npm (`viet-asr`, `@viet-asr/web`) · crates.io · NuGet | Next release — install from git for now |
 
-The platform native library (with the 78 MB int8 model baked in) is fetched once from the
-matching [GitHub Release](https://github.com/dangvansam/viet-asr/releases) on install or
-first use, then cached under `~/.cache/viet-asr/`. Set `VIETASR_NATIVE_DIR` to point at a
-local build instead.
+The platform native library is fetched once from the matching
+[GitHub Release](https://github.com/dangvansam/viet-asr/releases) on install or first use,
+then cached under `~/.cache/viet-asr/`. Set `VIETASR_NATIVE_DIR` to point at a local build
+instead.
+
+The 78 MB int8 model is not part of the packages: on first use the SDK downloads it from
+Hugging Face ([dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr), pinned
+revision, MD5-checked) into `~/.cache/vietasr/` and works offline from then on. Point
+`VIETASR_ASR_MODEL_DIR` (or the module's `model_dir`) at a folder with the files to skip the
+download, set `VIETASR_MODEL_BASE_URL` to use a mirror, or `VIETASR_OFFLINE=1` to forbid
+network access. Docker images ship with the model; the Android and iOS libraries embed it.
 
 <details open>
-<summary>🐍 <b>Python</b> — <code>pip install viet-asr</code></summary>
+<summary><b>Python</b> — <code>pip install viet-asr</code></summary>
 
 ```bash
 # from PyPI
@@ -63,7 +70,7 @@ Installing from git compiles `core/` and needs CMake and a C++17 compiler.
 </details>
 
 <details>
-<summary>🟢 <b>Node.js</b> — from git (npm coming)</summary>
+<summary><b>Node.js</b> — from git (npm coming)</summary>
 
 ```bash
 git clone https://github.com/dangvansam/viet-asr
@@ -74,7 +81,7 @@ Node.js 16+. A `postinstall` step downloads the native library for your platform
 </details>
 
 <details>
-<summary>🐹 <b>Go</b> — <code>go get …/bindings/go</code></summary>
+<summary><b>Go</b> — <code>go get …/bindings/go</code></summary>
 
 ```bash
 go get github.com/dangvansam/viet-asr/bindings/go
@@ -86,7 +93,7 @@ downloaded on first use.
 </details>
 
 <details>
-<summary>🦀 <b>Rust</b> — from git (crates.io coming)</summary>
+<summary><b>Rust</b> — from git (crates.io coming)</summary>
 
 In `Cargo.toml`:
 
@@ -99,7 +106,7 @@ viet-asr = { git = "https://github.com/dangvansam/viet-asr", package = "viet-asr
 </details>
 
 <details>
-<summary>☕ <b>Java / Kotlin</b> — <code>io.github.dangvansam:viet-asr</code></summary>
+<summary><b>Java / Kotlin</b> — <code>io.github.dangvansam:viet-asr</code></summary>
 
 Gradle, from **GitHub Packages** (needs a GitHub token with `read:packages`):
 
@@ -122,7 +129,7 @@ Java 11+. The native library is downloaded on first use.
 </details>
 
 <details>
-<summary>🔷 <b>C# / .NET</b> — from git (NuGet coming)</summary>
+<summary><b>C# / .NET</b> — from git (NuGet coming)</summary>
 
 ```bash
 git clone https://github.com/dangvansam/viet-asr
@@ -134,7 +141,7 @@ dotnet add package viet-asr --source ./nupkg
 </details>
 
 <details>
-<summary>🌐 <b>Browser</b> — from git (npm coming)</summary>
+<summary><b>Browser</b> — from git (npm coming)</summary>
 
 ```bash
 git clone https://github.com/dangvansam/viet-asr
@@ -146,7 +153,7 @@ fetched at runtime (override with the `modelUrl` option).
 </details>
 
 <details>
-<summary>🤖 <b>Android</b> — <code>io.github.dangvansam:viet-asr-android</code></summary>
+<summary><b>Android</b> — <code>io.github.dangvansam:viet-asr-android</code></summary>
 
 Gradle, from **GitHub Packages** (GitHub token with `read:packages`):
 
@@ -170,7 +177,7 @@ minSdk 24. The AAR bundles `arm64-v8a`, `armeabi-v7a` and `x86_64`. From git: cl
 </details>
 
 <details>
-<summary>🍎 <b>iOS / macOS</b> — Swift Package</summary>
+<summary><b>iOS / macOS</b> — Swift Package</summary>
 
 Swift Package Manager — add the package and `import VietASR`:
 
@@ -186,7 +193,7 @@ clone, then `bash bindings/apple/build-xcframework.sh` and open
 </details>
 
 <details>
-<summary>🐳 <b>Server</b> — <code>docker run dangvansam/viet-asr</code></summary>
+<summary><b>Server</b> — <code>docker run dangvansam/viet-asr</code></summary>
 
 ```bash
 docker run -p 8000:8000 dangvansam/viet-asr          # CPU, amd64 + arm64
@@ -198,7 +205,7 @@ built-in web UI. See [server/README.md](server/README.md).
 </details>
 
 <details>
-<summary>⚙️ <b>C / C++</b> — link <code>libvietasr</code></summary>
+<summary><b>C / C++</b> — link <code>libvietasr</code></summary>
 
 ```bash
 cmake -S core -B build && cmake --build build
@@ -210,9 +217,9 @@ Then link `libvietasr` and `#include <vietasr.h>`
 
 ---
 
-## ✨ Two modes, both first-class
+## Two modes, both first-class
 
-### 📄 Batch — transcribe a whole file
+### Batch — transcribe a whole file
 
 ```python
 import vietasr
@@ -222,7 +229,7 @@ result = pipe.transcribe("meeting.wav")
 print(result.text)
 ```
 
-### 🔴 Streaming — live captions as you speak
+### Streaming — live captions as you speak
 
 ```python
 pipe = vietasr.Pipeline.preset("stream")
@@ -242,7 +249,7 @@ Any sample rate, mono or stereo — it resamples internally. Feed it 8 kHz phone
 
 ---
 
-## 🧩 Modular pipeline — grow without rewriting
+## Modular pipeline — grow without rewriting
 
 VietASR isn't just ASR. It's a **pipeline of plug-in modules**. Today it transcribes; tomorrow you add speaker diarization, emotion, dialect — without changing a line of your integration code.
 
@@ -270,7 +277,7 @@ One JSON result, optional fields — a field appears only if its module ran:
 }
 ```
 
-### ⏱️ Word timestamps
+### Word timestamps
 
 Add `{"emit_words": true}` to get per-word start/end times straight from the transducer —
 no forced aligner, no extra model:
@@ -286,7 +293,7 @@ sherpa-onnx token timestamps.
 
 ---
 
-## 🎙️ Voice activity detection — is there speech?
+## Voice activity detection — is there speech?
 
 Sometimes you don't want a transcript — you just need to know **whether audio
 contains speech**: to gate a recorder, skip silent files, or scope ASR to the
@@ -322,7 +329,7 @@ into the SDK (no download), and it runs in **batch and streaming** alike —
 
 ---
 
-## 📋 At a glance
+## At a glance
 
 | | VietASR |
 |---|---|
@@ -331,14 +338,14 @@ into the SDK (no download), and it runs in **batch and streaming** alike —
 | Speed | 28× real-time batch, 6.7× real-time streaming — one CPU core |
 | Modes | Batch files and live streaming with partials |
 | Extras | VAD (Silero / TEN-VAD / energy), word timestamps, any sample rate |
-| Deployment | Offline, on-device; model embedded in the native library |
+| Deployment | On-device; model downloaded once from Hugging Face, then fully offline |
 | Platforms | Linux · Windows · macOS · Android · iOS · Browser (WASM) · Docker |
 | Bindings | C · C++ · Python · Node.js · Go · Rust · Java/Kotlin · C# · Swift · JS/WASM |
 | License | Apache-2.0 (SDK and model) |
 
 ---
 
-## 📊 Benchmark
+## Benchmark
 
 Word error rate (WER, %) — lower is better. Every system is scored on its **raw output**
 against cased, punctuated, written-form references, so missing punctuation, casing or ITN
@@ -400,7 +407,7 @@ parallel (the int8 encoder gains little from extra intra-op threads).
 
 ---
 
-## 🚀 Quickstart in every language
+## Quickstart in every language
 
 <details>
 <summary><b>Node.js</b></summary>
@@ -481,7 +488,7 @@ vietasr_pipeline_free(pipe);
 
 ---
 
-## 🛠️ How it works
+## How it works
 
 ```
 audio ─► resample 16k ─► Silero VAD ─► Kaldi fbank ─► Zipformer encoder ─► beam search ─► formatted text
@@ -492,59 +499,60 @@ audio ─► resample 16k ─► Silero VAD ─► Kaldi fbank ─► Zipformer 
 - **ONNX Runtime backend** — same engine on every platform; the encoder follows the selected execution provider (CPU / CUDA / CoreML / DirectML …)
 - **Pluggable modules** — adding a capability is one folder, see [docs/adding-a-module.md](docs/adding-a-module.md)
 - **Thread-safe** — one pipeline serves many concurrent streams, see [docs/thread-safety.md](docs/thread-safety.md)
-- **Zero-config** — the 78 MB int8 model is baked into the SDK; or load another with `{"model_dir": ...}`
+- **Zero-config** — the 78 MB int8 model is fetched from Hugging Face on first use; or load another with `{"model_dir": ...}`
 
 Full design: [docs/architecture.md](docs/architecture.md).
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 **Shipping now**
 
-- ✅ Streaming + batch Vietnamese ASR
-- ✅ Voice activity detection — speech-or-not classification, 3 backends (Silero / TEN-VAD / energy)
-- ✅ Built-in ITN, punctuation and casing — produced by the ASR model itself
-- ✅ 10 bindings — C, C++, Python, Node.js, Go, Java/Kotlin, C#, Rust, WebAssembly, Swift
-- ✅ Android native libraries (arm64 / armv7 / x86_64)
-- ✅ iOS / macOS — Swift package + `.xcframework`
-- ✅ Model bundled in the SDK, zero config
-- ✅ Any sample rate, mono / stereo
-- ✅ Adaptive VAD segmentation — waits longer on short phrases, cuts faster on long ones
-- ✅ Word-level timestamps from the transducer
-- ✅ Long audio of any length — automatic splitting at quiet points
-- ✅ Thread-safe multi-stream
-- ✅ GPU builds — CUDA (Linux / Windows), DirectML (Windows)
-- ✅ OpenAI-compatible server + Docker images (CPU multi-arch, CUDA)
-- ✅ Browser: live-microphone streaming
+- Streaming + batch Vietnamese ASR
+- Voice activity detection — speech-or-not classification, 3 backends (Silero / TEN-VAD / energy)
+- Built-in ITN, punctuation and casing — produced by the ASR model itself
+- 10 bindings — C, C++, Python, Node.js, Go, Java/Kotlin, C#, Rust, WebAssembly, Swift
+- Android native libraries (arm64 / armv7 / x86_64)
+- iOS / macOS — Swift package + `.xcframework`
+- Zero-config model download from Hugging Face (embedded on Android / iOS)
+- Any sample rate, mono / stereo
+- Adaptive VAD segmentation — waits longer on short phrases, cuts faster on long ones
+- Word-level timestamps from the transducer
+- Long audio of any length — automatic splitting at quiet points
+- Thread-safe multi-stream
+- GPU builds — CUDA (Linux / Windows), DirectML (Windows)
+- OpenAI-compatible server + Docker images (CPU multi-arch, CUDA)
+- Browser: live-microphone streaming
 
 **Coming next**
 
-- ⏳ npm, crates.io and NuGet packages
-- ⏳ Android `.aar` on Maven Central
-- ⏳ `diarization` module — who-spoke-when
-- ⏳ `gender` / `emotion` / `dialect` / `noise` modules
-- ⏳ `language-id` + `speaker-id` modules
-- ⏳ CoreML / NNAPI execution providers on mobile
-- ⏳ WebGPU backend for the browser
+- npm, crates.io and NuGet packages
+- Android `.aar` on Maven Central
+- `diarization` module — who-spoke-when
+- `gender` / `emotion` / `dialect` / `noise` modules
+- `language-id` + `speaker-id` modules
+- CoreML / NNAPI execution providers on mobile
+- WebGPU backend for the browser
 
 Want a module sooner? Open an issue — or build it yourself in <100 lines: [docs/adding-a-module.md](docs/adding-a-module.md).
 
 ---
 
-## 📦 The model
+## The model
 
 **viet-asr** — Zipformer2 transducer, 85.8M parameters, int8, 8192-token
 cased BPE vocabulary with digits and punctuation. Three ONNX files (encoder 69.5 MB,
 decoder 4.3 MB, joiner 4.0 MB) plus `tokens.txt`.
 
-It ships **inside the SDK**: committed to this repo as <50 MB chunks under
-[models/vietasr/](models/vietasr/) and baked into the native library at build time.
-Details: [models/MANIFEST.md](models/MANIFEST.md). Standalone int8 ONNX files (usable
-with sherpa-onnx) are on Hugging Face: [dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr)
-(mirror: [coflar-ai/viet-asr](https://huggingface.co/coflar-ai/viet-asr)). License: Apache-2.0.
+The model is not stored in this repository. The SDK downloads it from Hugging Face on
+first use — [dangvansam/viet-asr](https://huggingface.co/dangvansam/viet-asr) (mirror:
+[coflar-ai/viet-asr](https://huggingface.co/coflar-ai/viet-asr)), pinned in
+[core/src/modules/vietasr/models.json](core/src/modules/vietasr/models.json) — and the
+Android / iOS builds embed it at build time (`-DVIETASR_EMBED_MODEL=ON`). The int8 ONNX
+files also work with sherpa-onnx. License: Apache-2.0.
 
-## 🙏 Credits
+## Credits
 
 - Zipformer transducer architecture and training recipe from [k2-fsa/icefall](https://github.com/k2-fsa/icefall); decoding validated against [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
 - Multi-platform binding design inspired by [Vosk](https://github.com/alphacep/vosk-api)
@@ -552,9 +560,9 @@ with sherpa-onnx) are on Hugging Face: [dangvansam/viet-asr](https://huggingface
 - Voice activity detection via [Silero VAD](https://github.com/snakers4/silero-vad) (MIT)
   and **Powered by [ten-vad](https://github.com/TEN-framework/ten-vad)**
 
-## 📄 License
+## License
 
-Apache 2.0 for the SDK code and the bundled viet-asr model.
+Apache 2.0 for the SDK code and the viet-asr model.
 
 Bundled third-party components keep their own licenses — see
 [Third-party notices](#third-party-notices) below. Note that the optional
@@ -578,7 +586,7 @@ under its own license.
   [`core/third_party/ten-vad/LICENSE`](core/third_party/ten-vad/LICENSE) and
   [`core/third_party/ten-vad/NOTICES`](core/third_party/ten-vad/NOTICES).
 
-  > ⚠️ TEN-VAD is **not** plain Apache-2.0. The additional conditions include a
+  > **Note:** TEN-VAD is **not** plain Apache-2.0. The additional conditions include a
   > clause prohibiting deployment "in a way that competes with Agora's
   > offerings", and a requested attribution. Review the LICENSE before
   > redistributing VietASR with the `tenvad` backend enabled. The backend can
@@ -616,6 +624,6 @@ under its own license.
 
 **Vietnamese speech in, publish-ready text out. Offline. Free. Fast.**
 
-⭐ Star the repo if VietASR is useful to you.
+Star the repo if VietASR is useful to you.
 
 </div>

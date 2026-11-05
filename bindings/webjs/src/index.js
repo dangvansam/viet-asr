@@ -1,5 +1,5 @@
 import createVietasrModule from "../dist/vietasr-core.js";
-import { MODEL_BASE_URL } from "../dist/model-config.js";
+import { MODEL_BASE_URL, MODEL_FILES } from "../dist/model-config.js";
 
 const SAMPLE_RATE = 16000;
 const MAX_WINDOW_SECONDS = 30;
@@ -45,32 +45,29 @@ class AssetFetcher {
         return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
     }
 
-    async assemble(entry) {
-        const out = new Uint8Array(entry.total_size);
-        let offset = 0;
-        for (const chunk of entry.chunks) {
-            const part = await this.bytes(chunk.name);
-            if (part.length !== chunk.size) {
-                throw new Error(`chunk ${chunk.name}: got ${part.length}, expected ${chunk.size}`);
-            }
-            out.set(part, offset);
-            offset += part.length;
+    async verified(entry) {
+        const bytes = await this.bytes(entry.name);
+        if (entry.size && bytes.length !== entry.size) {
+            throw new Error(`${entry.name}: got ${bytes.length} bytes, expected ${entry.size}`);
         }
-        const got = await AssetFetcher.sha256Hex(out);
+        const got = await AssetFetcher.sha256Hex(bytes);
         if (got && entry.sha256 && got !== entry.sha256) {
             throw new Error(`${entry.name} sha256 mismatch`);
         }
-        return out;
+        return bytes;
     }
 
-    async loadModel() {
-        const manifest = JSON.parse(await this.text("chunks.json"));
-        const files = {};
-        for (const entry of manifest.files) {
-            files[entry.role] = await this.assemble(entry);
-        }
-        const tokens = await this.text(manifest.tokens || "tokens.txt");
-        return { encoder: files.encoder, decoder: files.decoder, joiner: files.joiner, tokens };
+    async loadModel(files = MODEL_FILES) {
+        const out = {};
+        await Promise.all(files.map(async (entry) => {
+            out[entry.role] = await this.verified(entry);
+        }));
+        return {
+            encoder: out.encoder,
+            decoder: out.decoder,
+            joiner: out.joiner,
+            tokens: new TextDecoder().decode(out.tokens),
+        };
     }
 }
 
