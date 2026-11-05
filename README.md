@@ -1,9 +1,12 @@
 # VietASR
 
-### Nói tiếng Việt — nhận văn bản chuẩn.
+[![Release](https://img.shields.io/github/v/release/dangvansam/viet-asr)](https://github.com/dangvansam/viet-asr/releases/latest)
+[![PyPI](https://img.shields.io/pypi/v/viet-asr)](https://pypi.org/project/viet-asr/)
+[![Docker](https://img.shields.io/docker/v/dangvansam/viet-asr?label=docker&sort=semver)](https://hub.docker.com/r/dangvansam/viet-asr)
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-dangvansam%2Fviet--asr-yellow)](https://huggingface.co/dangvansam/viet-asr)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](#-license)
 
-**Speak Vietnamese. Get publish-ready text.** Casing, punctuation and numbers come
-straight out of the model — offline, on-device, one C++ core, ten language bindings.
+**Vietnamese speech in, publish-ready text out — in a single pass.**
 
 ```python
 import vietasr
@@ -11,30 +14,33 @@ print(vietasr.Pipeline.preset("transcribe").transcribe("call.wav").text)
 # → "Vâng, thì em gọi điện lại để tư vấn và hỗ trợ chị tốt hơn ạ."
 ```
 
-No API keys, no cloud, no post-processing chain. The model ships inside the SDK.
+## 🌟 Highlights
 
-## 🌟 Why this model
-
-- **ITN built in** — numbers come out in written form (`"dưới 50 triệu"`,
-  `"9 lần trong một thế kỷ"`, `"11, 12, 13."`). No rule-based ITN pass to tune.
-- **Punctuation + casing built in** — `. , ? !` and proper capitalization are predicted
-  by the same network that recognizes the words, from the audio itself.
-- **Best formatted-text accuracy in our benchmark** — on 24 Vietnamese test sets it has
-  the lowest WER on raw formatted output among all public models and commercial APIs we
-  tested, **ahead of Google Chirp 3 and Viettel ASR**, and far ahead of open models 7–20×
-  its size
-  ([benchmark](#-benchmark)).
-- **Strong on telephony** — 20.6 % formatted WER on call-center audio vs 24.0 % (Chirp 3)
-  and 26.7 % (Viettel).
-- **Small and fast** — 86M params, 78 MB int8, **28× real-time on one CPU core**.
+- **Already-written text** — casing, punctuation and numbers in written form come straight
+  out of the model (`"Ngân sách dưới 50 triệu."`). No ITN step, no punctuation/casing (PnC)
+  model, no post-processing chain.
+- **One small model, one pass** — 86M parameters, 78 MB int8, baked into the SDK.
+- **28× faster than real time** on a single CPU core, end to end.
+- **Offline and private** — no API keys, no cloud; audio never leaves the device.
+- **Batch and live streaming** — VAD-segmented captions with partials, word-level
+  timestamps, any sample rate.
+- **Runs on any platform** — Linux, Windows, macOS, Android, iOS and the browser (WASM),
+  with Python, Node.js, Go, Rust, Java/Kotlin, C#, Swift, C/C++ bindings, a Docker server —
+  or the raw ONNX files with sherpa-onnx.
+- **Measured in the open** — WER on public Vietnamese test sets, every system scored on
+  its raw formatted output ([benchmark](#-benchmark)).
 
 ---
 
 ## ⚡ Install
 
-Every binding installs from its **package registry** or **directly from git** — both are
-shown per language below. Each wraps the **same C++ core** and produces **byte-identical
-transcripts**, so the API is the same everywhere.
+Every binding wraps the **same C++ core** and produces **byte-identical transcripts**, so
+the API is the same everywhere. Current release: **v0.1.0**.
+
+| Channel | Status |
+|---|---|
+| PyPI · Docker Hub · Go modules · Swift Package · GitHub Packages (Java, Android) | ✅ v0.1.0 |
+| npm (`viet-asr`, `@viet-asr/web`) · crates.io · NuGet | ⏳ next release — install from git for now |
 
 The platform native library (with the 78 MB int8 model baked in) is fetched once from the
 matching [GitHub Release](https://github.com/dangvansam/viet-asr/releases) on install or
@@ -57,13 +63,9 @@ Installing from git compiles `core/` and needs CMake and a C++17 compiler.
 </details>
 
 <details>
-<summary>🟢 <b>Node.js</b> — <code>npm install viet-asr</code></summary>
+<summary>🟢 <b>Node.js</b> — from git (npm coming)</summary>
 
 ```bash
-# from npm
-npm install viet-asr
-
-# from git
 git clone https://github.com/dangvansam/viet-asr
 npm install ./viet-asr/bindings/nodejs
 ```
@@ -79,19 +81,14 @@ go get github.com/dangvansam/viet-asr/bindings/go
 ```
 
 Go 1.18+. `go get` resolves straight from git — the same command serves a tagged release
-or the latest branch (append `@main`). Pure Go (purego, no cgo); the native library is
+(`@v0.1.0`) or the latest code (`@main`). Pure Go (purego, no cgo); the native library is
 downloaded on first use.
 </details>
 
 <details>
-<summary>🦀 <b>Rust</b> — <code>cargo add viet-asr</code></summary>
+<summary>🦀 <b>Rust</b> — from git (crates.io coming)</summary>
 
-```bash
-# from crates.io
-cargo add viet-asr
-```
-
-From git, in `Cargo.toml`:
+In `Cargo.toml`:
 
 ```toml
 [dependencies]
@@ -104,18 +101,20 @@ viet-asr = { git = "https://github.com/dangvansam/viet-asr", package = "viet-asr
 <details>
 <summary>☕ <b>Java / Kotlin</b> — <code>io.github.dangvansam:viet-asr</code></summary>
 
-Gradle — from **GitHub Packages** (needs a GitHub token) or **JitPack** (no auth):
+Gradle, from **GitHub Packages** (needs a GitHub token with `read:packages`):
 
 ```kotlin
 repositories {
-    // GitHub Packages — add your GitHub username + token under credentials { }
-    maven { url = uri("https://maven.pkg.github.com/dangvansam/viet-asr") }
-    // JitPack — no authentication required
-    maven { url = uri("https://jitpack.io") }
+    maven {
+        url = uri("https://maven.pkg.github.com/dangvansam/viet-asr")
+        credentials {
+            username = System.getenv("GITHUB_ACTOR")
+            password = System.getenv("GITHUB_TOKEN")
+        }
+    }
 }
 dependencies {
-    implementation("io.github.dangvansam:viet-asr:0.1.0")    // GitHub Packages
-    // implementation("com.github.dangvansam:viet-asr:<tag>") // JitPack
+    implementation("io.github.dangvansam:viet-asr:0.1.0")
 }
 ```
 
@@ -123,39 +122,43 @@ Java 11+. The native library is downloaded on first use.
 </details>
 
 <details>
-<summary>🔷 <b>C# / .NET</b> — <code>dotnet add package viet-asr</code></summary>
+<summary>🔷 <b>C# / .NET</b> — from git (NuGet coming)</summary>
 
 ```bash
-# from NuGet
-dotnet add package viet-asr
+git clone https://github.com/dangvansam/viet-asr
+dotnet pack viet-asr/bindings/csharp/Vietasr -o ./nupkg
+dotnet add package viet-asr --source ./nupkg
 ```
 
-From git: clone the repo and `dotnet pack bindings/csharp/Vietasr`. .NET 8+. The native
-library is resolved and downloaded on first use.
+.NET 8+. The native library is resolved and downloaded on first use.
 </details>
 
 <details>
-<summary>🌐 <b>Browser</b> — <code>npm install @viet-asr/web</code></summary>
+<summary>🌐 <b>Browser</b> — from git (npm coming)</summary>
 
 ```bash
-# from npm
-npm install @viet-asr/web
+git clone https://github.com/dangvansam/viet-asr
+cd viet-asr/bindings/webjs && npm run build
 ```
 
-From git: clone the repo, then `cd bindings/webjs && npm run build`. Ships the WASM core
-plus `onnxruntime-web`; the model is fetched at runtime (override with the `modelUrl`
-option).
+Needs Emscripten (`em++`). Ships the WASM core plus `onnxruntime-web`; the model is
+fetched at runtime (override with the `modelUrl` option).
 </details>
 
 <details>
 <summary>🤖 <b>Android</b> — <code>io.github.dangvansam:viet-asr-android</code></summary>
 
-Gradle, from **GitHub Packages**:
+Gradle, from **GitHub Packages** (GitHub token with `read:packages`):
 
 ```kotlin
 repositories {
-    // add your GitHub username + token under credentials { }
-    maven { url = uri("https://maven.pkg.github.com/dangvansam/viet-asr") }
+    maven {
+        url = uri("https://maven.pkg.github.com/dangvansam/viet-asr")
+        credentials {
+            username = System.getenv("GITHUB_ACTOR")
+            password = System.getenv("GITHUB_TOKEN")
+        }
+    }
 }
 dependencies {
     implementation("io.github.dangvansam:viet-asr-android:0.1.0")
@@ -180,6 +183,18 @@ ships `CVietASR.xcframework` (iOS device + simulator + macOS), with the ASR
 model and ONNX Runtime baked in. From git:
 clone, then `bash bindings/apple/build-xcframework.sh` and open
 `bindings/apple/Package.swift`. See [bindings/apple/README.md](bindings/apple/README.md).
+</details>
+
+<details>
+<summary>🐳 <b>Server</b> — <code>docker run dangvansam/viet-asr</code></summary>
+
+```bash
+docker run -p 8000:8000 dangvansam/viet-asr          # CPU, amd64 + arm64
+docker run --gpus all -p 8000:8000 dangvansam/viet-asr:gpu   # NVIDIA CUDA
+```
+
+OpenAI-compatible `POST /v1/audio/transcriptions` plus `WebSocket /v1/stream`, with a
+built-in web UI. See [server/README.md](server/README.md).
 </details>
 
 <details>
@@ -255,6 +270,20 @@ One JSON result, optional fields — a field appears only if its module ran:
 }
 ```
 
+### ⏱️ Word timestamps
+
+Add `{"emit_words": true}` to get per-word start/end times straight from the transducer —
+no forced aligner, no extra model:
+
+```python
+pipe = vietasr.Pipeline.new().add("vietasr", {"emit_words": True}).build()
+for w in pipe.transcribe("call.wav")["segments"][0]["words"]:
+    print(f'{w["start"]:.2f}–{w["end"]:.2f}  {w["word"]}')
+```
+
+Word starts land on the 40 ms encoder frame where each word is emitted, matching
+sherpa-onnx token timestamps.
+
 ---
 
 ## 🎙️ Voice activity detection — is there speech?
@@ -293,71 +322,68 @@ into the SDK (no download), and it runs in **batch and streaming** alike —
 
 ---
 
-## 🆚 Why VietASR?
+## 📋 At a glance
 
-| | ☁️ Cloud APIs | 🐋 Whisper-class | VietASR |
-|---|---|---|---|
-| Works offline | ❌ | ✅ | ✅ |
-| Formatted output (ITN + punctuation + casing) | ✅ | partial | ✅ **in-model** |
-| Live captions | ✅ | ❌ batch only | ✅ VAD-segmented |
-| Cost per hour | 💰💰💰 | free | **free** |
-| Privacy (audio leaves device) | ❌ | ✅ | ✅ |
-| Model size | — | 0.8–3 GB | **78 MB** |
-| Vietnamese tuned | generic | generic | **purpose-built** |
-| Runs in a browser | ❌ | hard | ✅ WASM |
-| Languages / bindings | SDK-limited | Python-first | **10 bindings** |
-| Setup | API keys, billing | pip + CUDA | **one line** |
+| | VietASR |
+|---|---|
+| Output | Written-form text: casing, punctuation, numbers (ITN) — in-model |
+| Model | Zipformer2 transducer, 86M params, 78 MB int8 |
+| Speed | 28× real-time batch, 6.7× real-time streaming — one CPU core |
+| Modes | Batch files and live streaming with partials |
+| Extras | VAD (Silero / TEN-VAD / energy), word timestamps, any sample rate |
+| Deployment | Offline, on-device; model embedded in the native library |
+| Platforms | Linux · Windows · macOS · Android · iOS · Browser (WASM) · Docker |
+| Bindings | C · C++ · Python · Node.js · Go · Rust · Java/Kotlin · C# · Swift · JS/WASM |
+| License | Apache-2.0 (SDK and model) |
 
 ---
 
 ## 📊 Benchmark
 
-Pooled WER (%) over **24 Vietnamese test sets** — public (VIVOS, VLSP 2018–2023,
-Bud500, 7 regional-accent sets) plus private call-center and meeting sets. Lower is
-better. Every system is scored on its **raw output** against cased, punctuated,
-written-form references (`pnc`), so missing punctuation, casing or ITN counts as error —
-which is what a user actually reads.
+Word error rate (WER, %) — lower is better. Every system is scored on its **raw output**
+against cased, punctuated, written-form references, so missing punctuation, casing or ITN
+counts as an error — this is the text a user actually reads.
 
-| System | Size | Benchmark | Regional | VLSP | Call center | Meeting | **All 24** |
+### Public test sets
+
+References were re-annotated in written form (casing, punctuation, numbers).
+
+| System | Size | VIVOS | Bud500 | VLSP 2018 | VLSP 2021 | VLSP 2022 | VLSP 2023 |
 |---|---|---|---|---|---|---|---|
-| **VietASR Zipformer-vi** | 86M | 18.13 | 16.82 | **25.90** | **20.58** | **32.64** | **24.14** |
-| Google Chirp 3 | API | 17.78 | 16.70 | 26.26 | 24.04 | 34.84 | 25.16 |
-| Viettel ASR | API | 22.57 | 15.15 | 26.80 | 26.71 | 36.31 | 26.38 |
-| Fun-ASR-MLT-Nano-2512 | ~0.8B | 14.56 | 14.09 | 30.09 | 34.39 | 44.23 | 29.57 |
-| Parakeet-CTC-0.6B-vi | 0.6B | 17.10 | 16.41 | 30.54 | 37.59 | 43.97 | 30.80 |
-| Qwen3-ASR-1.7B | 1.7B | 21.56 | 24.90 | 31.99 | 32.68 | 40.54 | 31.49 |
-| gipformer 1.5 RNNT | 65M | 27.09 | 31.18 | 32.13 | 31.16 | 38.82 | 32.19 |
-| ZipFormer-30M (hynt) | 30M | 27.11 | 31.20 | 32.90 | 33.38 | 40.95 | 33.25 |
-| Nemotron-3.5-ASR-Streaming | 0.6B | 18.57 | 18.06 | 35.24 | 40.77 | 44.08 | 34.11 |
-| VietASR-68M (zzasdf) | 68M | 28.49 | 32.09 | 34.19 | 34.38 | 42.10 | 34.43 |
-| ChunkFormer-CTC-Large | 110M | 27.87 | 31.94 | 35.66 | 40.47 | 44.62 | 36.52 |
-| PhoWhisper-Large | 1.55B | 29.31 | 29.33 | 38.94 | 38.33 | 47.06 | 37.98 |
-| Whisper-Large-V3 | 1.55B | 40.22 | 20.02 | 49.15 | 36.53 | 49.73 | 43.28 |
+| **viet-asr** | 86M | 20.92 | 18.81 | 15.97 | 18.20 | 23.19 | 27.90 |
+| **viet-asr (Pro)** | – | 8.85 | 9.37 | 7.67 | 12.87 | 16.27 | 21.55 |
+| Google Chirp 3 | API | 11.73 | 21.99 | 10.02 | 15.45 | 22.93 | 23.15 |
+| Viettel ASR | API | 16.69 | 25.68 | 17.19 | 26.04 | 22.39 | 27.82 |
+| Parakeet-CTC-0.6B-vi | 0.6B | 15.54 | 17.30 | 17.06 | 22.09 | 28.59 | 30.07 |
+| Qwen3-ASR-1.7B | 1.7B | 24.04 | 22.94 | 17.92 | 20.70 | 28.97 | 33.11 |
+| gipformer 1.5 RNNT | 65M | 29.89 | 26.86 | 26.90 | 22.85 | 30.44 | 34.23 |
+| ZipFormer-30M (hynt) | 30M | 30.24 | 26.79 | 27.04 | 23.63 | 31.51 | 33.22 |
+| Nemotron-3.5-ASR-Streaming | 0.6B | 17.10 | 18.14 | 19.89 | 23.21 | 29.59 | 32.74 |
+| VietASR-68M (zzasdf) | 68M | 31.94 | 28.45 | 27.74 | 24.96 | 32.05 | 36.68 |
+| ChunkFormer-CTC-Large | 110M | 29.99 | 27.58 | 27.97 | 26.32 | 34.20 | 37.03 |
+| PhoWhisper-Large | 1.55B | 23.63 | 31.17 | 26.59 | 25.34 | 34.39 | 35.38 |
+| Whisper-Large-V3 | 1.55B | 17.36 | 53.39 | 16.88 | 28.29 | 35.07 | 35.75 |
 
-**Word recognition only.** With everything lower-cased, punctuation stripped and digits
-spelled out (`spoken_canonical`), the comparison measures bare word accuracy. Here the
-models that output lower-case, unpunctuated text lead — they leave ITN and punctuation to
-you:
+*viet-asr* is the public model in this repo and on Hugging Face; *viet-asr (Pro)* is a
+higher-accuracy model that is not publicly released.
 
-| System | All 24 (`spoken_canonical`) |
-|---|---|
-| gipformer 1.5 RNNT | 12.09 |
-| gipformer 1.0 RNNT | 13.61 |
-| ZipFormer-30M (hynt) | 13.68 |
-| Viettel ASR | 14.21 |
-| Google Chirp 3 | 15.28 |
-| VietASR-68M (zzasdf) | 15.34 |
-| **VietASR Zipformer-vi** | **17.04** |
-| ChunkFormer-CTC-Large | 17.34 |
-| Qwen3-ASR-1.7B | 17.37 |
-| PhoWhisper-Medium | 20.92 |
-| Fun-ASR-MLT-Nano-2512 | 21.22 |
-| Parakeet-CTC-0.6B-vi | 22.12 |
-| Whisper-Large-V3 | 34.01 |
-
-Scores are for the fp32 export decoded with modified beam search (4 paths). The int8
+viet-asr scores are for the fp32 export decoded with modified beam search (4 paths). The int8
 model shipped in the SDK matched fp32 within 0.15 WER on a 900-utterance cross-check,
 and the SDK's C++ decoder matched sherpa-onnx's output on the same files.
+
+<details>
+<summary>Public test sets</summary>
+
+| Set | Source | Utterances |
+|---|---|---|
+| VIVOS | [AILAB, VNU-HCM](https://ailab.hcmus.edu.vn/vivos) — read speech | 760 |
+| Bud500 | [linhtran92/viet_bud500](https://huggingface.co/datasets/linhtran92/viet_bud500) — podcasts | 7,500 |
+| VLSP 2018 | VLSP 2018 ASR test | 795 |
+| VLSP 2021 | VLSP 2021 ASR tasks 1 + 2 | 1,893 |
+| VLSP 2022 | VLSP 2022 ASR tasks 1 + 2 | 11,683 |
+| VLSP 2023 | VLSP 2023 ASR public test | 2,111 |
+
+</details>
 
 ### Speed
 
@@ -484,17 +510,22 @@ Full design: [docs/architecture.md](docs/architecture.md).
 - ✅ iOS / macOS — Swift package + `.xcframework`
 - ✅ Model bundled in the SDK, zero config
 - ✅ Any sample rate, mono / stereo
-- ✅ Endpoint-aware segmentation
+- ✅ Adaptive VAD segmentation — waits longer on short phrases, cuts faster on long ones
+- ✅ Word-level timestamps from the transducer
+- ✅ Long audio of any length — automatic splitting at quiet points
 - ✅ Thread-safe multi-stream
+- ✅ GPU builds — CUDA (Linux / Windows), DirectML (Windows)
+- ✅ OpenAI-compatible server + Docker images (CPU multi-arch, CUDA)
 - ✅ Browser: live-microphone streaming
 
 **Coming next**
 
+- ⏳ npm, crates.io and NuGet packages
 - ⏳ Android `.aar` on Maven Central
 - ⏳ `diarization` module — who-spoke-when
 - ⏳ `gender` / `emotion` / `dialect` / `noise` modules
 - ⏳ `language-id` + `speaker-id` modules
-- ⏳ GPU execution providers (CUDA / CoreML / NNAPI)
+- ⏳ CoreML / NNAPI execution providers on mobile
 - ⏳ WebGPU backend for the browser
 
 Want a module sooner? Open an issue — or build it yourself in <100 lines: [docs/adding-a-module.md](docs/adding-a-module.md).
@@ -503,7 +534,7 @@ Want a module sooner? Open an issue — or build it yourself in <100 lines: [doc
 
 ## 📦 The model
 
-**VietASR Zipformer-vi** — Zipformer2 transducer, 85.8M parameters, int8, 8192-token
+**viet-asr** — Zipformer2 transducer, 85.8M parameters, int8, 8192-token
 cased BPE vocabulary with digits and punctuation. Three ONNX files (encoder 69.5 MB,
 decoder 4.3 MB, joiner 4.0 MB) plus `tokens.txt`.
 
@@ -523,7 +554,7 @@ with sherpa-onnx) are on Hugging Face: [dangvansam/viet-asr](https://huggingface
 
 ## 📄 License
 
-Apache 2.0 for the SDK code and the bundled VietASR Zipformer-vi model.
+Apache 2.0 for the SDK code and the bundled viet-asr model.
 
 Bundled third-party components keep their own licenses — see
 [Third-party notices](#third-party-notices) below. Note that the optional
@@ -583,8 +614,8 @@ under its own license.
 
 <div align="center">
 
-**Nói tiếng Việt — nhận văn bản chuẩn. Offline. Free. Fast.**
+**Vietnamese speech in, publish-ready text out. Offline. Free. Fast.**
 
-⭐ Star it if VietASR saved you a cloud bill.
+⭐ Star the repo if VietASR is useful to you.
 
 </div>
